@@ -1,6 +1,6 @@
 import fs from 'fs';
 import axios from 'axios';
-import * as cheerio from 'cheerio';
+import cheerio from 'cheerio';
 
 async function fetchNBAStats() {
   try {
