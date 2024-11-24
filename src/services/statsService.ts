@@ -1,5 +1,4 @@
 import { teamStats } from '../data/teamStats';
-import type { TeamStats } from '../types';
 
 export function generatePrediction(
   homeTeam: string,
@@ -7,13 +6,7 @@ export function generatePrediction(
   fanduelSpreadHome: number,
   fanduelTotal: number,
   isPlayoffs: boolean = false
-): {
-  homeScore: number;
-  awayScore: number;
-  totalScore: number;
-  suggestedBet: string;
-  overUnder: string;
-} {
+) {
   const homeStats = teamStats[homeTeam];
   const awayStats = teamStats[awayTeam];
 
@@ -46,24 +39,30 @@ export function generatePrediction(
 
   const totalScore = homeScore + awayScore;
   const projectedSpread = homeScore - awayScore;
-
-  // Betting logic:
-  // If fanduelSpreadHome is -3, home team needs to win by more than 3
-  // If projectedSpread is less than the absolute value of fanduelSpreadHome,
-  // then the underdog will cover
-  let suggestedBet;
-  const spreadDifference = Math.abs(projectedSpread - fanduelSpreadHome);
   
-  if (spreadDifference >= 2) { // Only suggest bets with at least 2 points edge
-    if (projectedSpread < Math.abs(fanduelSpreadHome)) {
-      // Underdog will cover
-      suggestedBet = `Bet on ${awayTeam}`;
+  // Betting logic:
+  // If home team is favored (negative spread):
+  // - We need them to win by MORE than the spread amount
+  // If home team is underdog (positive spread):
+  // - They can lose by less than the spread amount or win outright
+  
+  const MINIMUM_EDGE = 2;
+  let suggestedBet = 'No clear edge';
+
+  if (Math.abs(projectedSpread - fanduelSpreadHome) >= MINIMUM_EDGE) {
+    // For negative spread (home favorite), we need projectedSpread > |fanduelSpreadHome|
+    // For positive spread (home underdog), we need projectedSpread > -fanduelSpreadHome
+    if (fanduelSpreadHome <= 0) {
+      // Home team is favored
+      suggestedBet = projectedSpread > Math.abs(fanduelSpreadHome)
+        ? `Bet on ${homeTeam}` // Projected to cover
+        : `Bet on ${awayTeam}`; // Not projected to cover
     } else {
-      // Favorite will cover
-      suggestedBet = `Bet on ${homeTeam}`;
+      // Away team is favored
+      suggestedBet = projectedSpread > -fanduelSpreadHome
+        ? `Bet on ${homeTeam}` // Projected to cover
+        : `Bet on ${awayTeam}`; // Not projected to cover
     }
-  } else {
-    suggestedBet = 'No clear edge';
   }
 
   return {
