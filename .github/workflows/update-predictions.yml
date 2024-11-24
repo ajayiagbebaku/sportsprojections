@@ -8,6 +8,12 @@ on:
 jobs:
   update-predictions:
     runs-on: ubuntu-latest
+    
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      RAPIDAPI_HOST: ${{ secrets.RAPIDAPI_HOST }}
 
     steps:
       - uses: actions/checkout@v4
@@ -16,14 +22,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Validate environment variables
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "Error: SUPABASE_URL is not set"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "Error: SUPABASE_KEY is not set"
+            exit 1
+          fi
+          if [ -z "$RAPIDAPI_KEY" ]; then
+            echo "Error: RAPIDAPI_KEY is not set"
+            exit 1
+          fi
+          if [ -z "$RAPIDAPI_HOST" ]; then
+            echo "Error: RAPIDAPI_HOST is not set"
+            exit 1
+          fi
 
       - name: Update predictions and scores
         run: node scripts/update-predictions.js
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-          RAPIDAPI_HOST: ${{ secrets.RAPIDAPI_HOST }}

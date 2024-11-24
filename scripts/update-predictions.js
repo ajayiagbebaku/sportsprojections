@@ -2,6 +2,15 @@ import axios from 'axios';
 import { format, subDays } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 
+// Validate required environment variables
+const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_KEY', 'RAPIDAPI_KEY', 'RAPIDAPI_HOST'];
+for (const envVar of requiredEnvVars) {
+  if (!process.env[envVar]) {
+    console.error(`Missing required environment variable: ${envVar}`);
+    process.exit(1);
+  }
+}
+
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 const RAPIDAPI_HOST = process.env.RAPIDAPI_HOST;
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -47,9 +56,57 @@ async function updatePredictions() {
     // Process and store new predictions
     if (oddsResponse.data?.body) {
       for (const [gameId, game] of Object.entries(oddsResponse.data.body)) {
-        // Process game odds and store predictions
-        // Implementation similar to your existing code
-        console.log('Processing predictions for game:', gameId);
+        try {
+          const homeTeamKey = teamCodeMapping[game.homeTeam];
+          const awayTeamKey = teamCodeMapping[game.awayTeam];
+
+          if (!homeTeamKey || !awayTeamKey) {
+            console.warn(`Unknown team mapping for ${game.homeTeam} or ${game.awayTeam}`);
+            continue;
+          }
+
+          const fanduelBook = game.sportsBooks?.find(book => 
+            book.sportsBook.toLowerCase() === 'fanduel'
+          );
+          
+          if (!fanduelBook?.odds) {
+            console.warn('No FanDuel odds found for game', gameId);
+            continue;
+          }
+
+          const fanduelOdds = fanduelBook.odds;
+          const fanduelSpreadHome = parseFloat(fanduelOdds.homeTeamSpread);
+          const fanduelTotal = parseFloat(fanduelOdds.totalOver);
+          const homeMoneyline = parseInt(fanduelOdds.homeTeamMLOdds);
+          const awayMoneyline = parseInt(fanduelOdds.awayTeamMLOdds);
+
+          if (isNaN(fanduelSpreadHome) || isNaN(fanduelTotal)) {
+            console.warn('Invalid odds values for game', gameId);
+            continue;
+          }
+
+          // Save prediction to Supabase
+          const { error } = await supabase
+            .from('predictions')
+            .upsert({
+              game_id: gameId,
+              game_date: format(today, 'yyyy-MM-dd'),
+              home_team: homeTeamKey,
+              away_team: awayTeamKey,
+              fanduel_spread_home: fanduelSpreadHome,
+              fanduel_total: fanduelTotal,
+              home_moneyline: homeMoneyline,
+              away_moneyline: awayMoneyline
+            });
+
+          if (error) {
+            console.error(`Error saving prediction for game ${gameId}:`, error);
+          } else {
+            console.log(`Saved prediction for game ${gameId}`);
+          }
+        } catch (error) {
+          console.error(`Error processing game ${gameId}:`, error);
+        }
       }
     }
 
@@ -61,12 +118,12 @@ async function updatePredictions() {
           const actualAwayScore = parseInt(score.awayPts);
 
           if (!isNaN(actualHomeScore) && !isNaN(actualAwayScore)) {
-            // Update the prediction record with actual scores
             const { error } = await supabase
               .from('predictions')
               .update({
                 actual_home_score: actualHomeScore,
-                actual_away_score: actualAwayScore
+                actual_away_score: actualAwayScore,
+                game_status: 'Completed'
               })
               .eq('game_id', gameId);
 
@@ -81,10 +138,49 @@ async function updatePredictions() {
     }
 
     console.log('Finished updating predictions and scores');
+    process.exit(0);
   } catch (error) {
     console.error('Error updating predictions:', error);
     process.exit(1);
   }
 }
+
+const teamCodeMapping = {
+  'ATL': 'Atlanta',
+  'BOS': 'Boston',
+  'BKN': 'Brooklyn',
+  'BRK': 'Brooklyn',
+  'CHA': 'Charlotte',
+  'CHI': 'Chicago',
+  'CLE': 'Cleveland',
+  'DAL': 'Dallas',
+  'DEN': 'Denver',
+  'DET': 'Detroit',
+  'GSW': 'Golden State',
+  'GS': 'Golden State',
+  'HOU': 'Houston',
+  'IND': 'Indiana',
+  'LAC': 'LA Clippers',
+  'LAL': 'LA Lakers',
+  'MEM': 'Memphis',
+  'MIA': 'Miami',
+  'MIL': 'Milwaukee',
+  'MIN': 'Minnesota',
+  'NOP': 'New Orleans',
+  'NO': 'New Orleans',
+  'NYK': 'New York',
+  'NY': 'New York',
+  'OKC': 'Oklahoma City',
+  'ORL': 'Orlando',
+  'PHI': 'Philadelphia',
+  'PHX': 'Phoenix',
+  'POR': 'Portland',
+  'SAC': 'Sacramento',
+  'SAS': 'San Antonio',
+  'SA': 'San Antonio',
+  'TOR': 'Toronto',
+  'UTA': 'Utah',
+  'WAS': 'Washington'
+};
 
 updatePredictions();
