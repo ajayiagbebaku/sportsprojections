@@ -3,106 +3,123 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = 'https://yjebzlvsjonvxfpcuwaa.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZWJ6bHZzam9udnhmcGN1d2FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzIzNDI0MjAsImV4cCI6MjA0NzkxODQyMH0.s7pBFZGY1ZORMVSGQGpcp7GsiMzGOBeUIf2EapJ5yzU';
 
-// Create Supabase client with proper headers
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-    detectSessionInUrl: false
-  },
-  global: {
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': '*/*',
-      'Prefer': 'return=minimal',
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`
-    }
-  }
-});
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-export async function updateGameResults(gameId: string, homeScore: number, awayScore: number) {
-  try {
-    // Get the prediction for this game
-    const { data: prediction } = await supabase
-      .from('predictions')
-      .select('*')
-      .eq('game_id', gameId)
-      .single();
+export interface Prediction {
+  id?: number;
+  game_id: string;
+  game_date: string;
+  home_team: string;
+  away_team: string;
+  predicted_home_score: number;
+  predicted_away_score: number;
+  predicted_total: number;
+  fanduel_spread_home: number;
+  fanduel_total: number;
+  actual_home_score?: number;
+  actual_away_score?: number;
+  spread_result?: 'win' | 'loss' | 'push';
+  total_result?: 'win' | 'loss' | 'push';
+  created_at?: string;
+}
 
-    if (!prediction) {
-      console.log(`No prediction found for game ${gameId}`);
-      return;
-    }
+export async function savePrediction(prediction: Omit<Prediction, 'id' | 'created_at'>) {
+  const { data, error } = await supabase
+    .from('predictions')
+    .insert([prediction])
+    .select();
 
-    // Calculate spread result
-    const actualSpread = homeScore - awayScore;
-    const spreadResult = calculateSpreadResult(actualSpread, prediction.fanduel_spread_home);
+  if (error) throw error;
+  return data[0];
+}
 
-    // Calculate total result
-    const actualTotal = homeScore + awayScore;
-    const totalResult = calculateTotalResult(actualTotal, prediction.fanduel_total);
+export async function updateGameResults(
+  gameId: string,
+  homeScore: number,
+  awayScore: number
+) {
+  // Fetch the prediction first
+  const { data: predictions, error: fetchError } = await supabase
+    .from('predictions')
+    .select('*')
+    .eq('game_id', gameId)
+    .single();
 
-    // Update the prediction with results
-    await supabase
-      .from('predictions')
-      .update({
-        actual_home_score: homeScore,
-        actual_away_score: awayScore,
-        spread_result: spreadResult,
-        total_result: totalResult,
-        completed: true
-      })
-      .eq('game_id', gameId);
+  if (fetchError) throw fetchError;
+  if (!predictions) throw new Error('Prediction not found');
 
-  } catch (error) {
-    console.error('Error updating game results:', error);
-    throw error;
-  }
+  const prediction = predictions as Prediction;
+  
+  // Calculate spread result
+  const actualSpread = homeScore - awayScore;
+  const predictedSpread = prediction.predicted_home_score - prediction.predicted_away_score;
+  const spreadResult = calculateSpreadResult(
+    actualSpread,
+    prediction.fanduel_spread_home
+  );
+
+  // Calculate total result
+  const actualTotal = homeScore + awayScore;
+  const totalResult = calculateTotalResult(
+    actualTotal,
+    prediction.fanduel_total
+  );
+
+  // Update the prediction with results
+  const { error: updateError } = await supabase
+    .from('predictions')
+    .update({
+      actual_home_score: homeScore,
+      actual_away_score: awayScore,
+      spread_result: spreadResult,
+      total_result: totalResult
+    })
+    .eq('game_id', gameId);
+
+  if (updateError) throw updateError;
+}
+
+function calculateSpreadResult(
+  actualSpread: number,
+  fanduelSpread: number
+): 'win' | 'loss' | 'push' {
+  if (actualSpread === fanduelSpread) return 'push';
+  return actualSpread > fanduelSpread ? 'win' : 'loss';
+}
+
+function calculateTotalResult(
+  actualTotal: number,
+  fanduelTotal: number
+): 'win' | 'loss' | 'push' {
+  if (actualTotal === fanduelTotal) return 'push';
+  return actualTotal > fanduelTotal ? 'over' : 'under';
 }
 
 export async function getResults() {
-  try {
-    const { data: predictions } = await supabase
-      .from('predictions')
-      .select('*')
-      .eq('completed', true);
+  const { data, error } = await supabase
+    .from('predictions')
+    .select('*')
+    .not('spread_result', 'is', null);
 
-    if (!predictions) {
-      return {
-        spread: { wins: 0, losses: 0, pushes: 0 },
-        total: { wins: 0, losses: 0, pushes: 0 }
-      };
-    }
+  if (error) throw error;
 
-    return predictions.reduce((acc, game) => {
-      // Count spread results
-      if (game.spread_result === 'win') acc.spread.wins++;
-      else if (game.spread_result === 'loss') acc.spread.losses++;
-      else if (game.spread_result === 'push') acc.spread.pushes++;
+  const results = data.reduce((acc, prediction) => {
+    return {
+      spread: {
+        wins: acc.spread.wins + (prediction.spread_result === 'win' ? 1 : 0),
+        losses: acc.spread.losses + (prediction.spread_result === 'loss' ? 1 : 0),
+        pushes: acc.spread.pushes + (prediction.spread_result === 'push' ? 1 : 0),
+      },
+      total: {
+        wins: acc.total.wins + (prediction.total_result === 'win' ? 1 : 0),
+        losses: acc.total.losses + (prediction.total_result === 'loss' ? 1 : 0),
+        pushes: acc.total.pushes + (prediction.total_result === 'push' ? 1 : 0),
+      }
+    };
+  }, {
+    spread: { wins: 0, losses: 0, pushes: 0 },
+    total: { wins: 0, losses: 0, pushes: 0 }
+  });
 
-      // Count total results
-      if (game.total_result === 'win') acc.total.wins++;
-      else if (game.total_result === 'loss') acc.total.losses++;
-      else if (game.total_result === 'push') acc.total.pushes++;
-
-      return acc;
-    }, {
-      spread: { wins: 0, losses: 0, pushes: 0 },
-      total: { wins: 0, losses: 0, pushes: 0 }
-    });
-  } catch (error) {
-    console.error('Error getting results:', error);
-    throw error;
-  }
-}
-
-function calculateSpreadResult(actualSpread: number, predictedSpread: number): 'win' | 'loss' | 'push' {
-  if (actualSpread === predictedSpread) return 'push';
-  return actualSpread > predictedSpread ? 'win' : 'loss';
-}
-
-function calculateTotalResult(actualTotal: number, predictedTotal: number): 'win' | 'loss' | 'push' {
-  if (actualTotal === predictedTotal) return 'push';
-  return actualTotal > predictedTotal ? 'over' : 'under';
+  return results;
 }
