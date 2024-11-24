@@ -1,11 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
+import { format } from 'date-fns';
+import type { GamePrediction } from '../types';
 
 const supabaseUrl = 'https://yjebzlvsjonvxfpcuwaa.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZWJ6bHZzam9udnhmcGN1d2FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzIzNDI0MjAsImV4cCI6MjA0NzkxODQyMH0.s7pBFZGY1ZORMVSGQGpcp7GsiMzGOBeUIf2EapJ5yzU';
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  db: {
+    schema: 'public'
+  }
+});
 
-export interface Prediction {
+interface PredictionRecord {
   id?: number;
   game_id: string;
   game_date: string;
@@ -16,110 +22,140 @@ export interface Prediction {
   predicted_total: number;
   fanduel_spread_home: number;
   fanduel_total: number;
-  actual_home_score?: number;
-  actual_away_score?: number;
-  spread_result?: 'win' | 'loss' | 'push';
-  total_result?: 'win' | 'loss' | 'push';
-  created_at?: string;
+  actual_home_score?: number | null;
+  actual_away_score?: number | null;
+  spread_result?: 'win' | 'loss' | 'push' | null;
+  total_result?: 'win' | 'loss' | 'push' | null;
 }
 
-export async function savePrediction(prediction: Omit<Prediction, 'id' | 'created_at'>) {
-  const { data, error } = await supabase
-    .from('predictions')
-    .insert([prediction])
-    .select();
+export async function getPredictions(date: string): Promise<GamePrediction[]> {
+  try {
+    const { data, error } = await supabase
+      .from('predictions')
+      .select('*')
+      .eq('game_date', date);
 
-  if (error) throw error;
-  return data[0];
+    if (error) throw error;
+    if (!data) return [];
+
+    return data.map(record => ({
+      gameId: record.game_id,
+      homeTeam: record.home_team,
+      awayTeam: record.away_team,
+      homeScore: record.predicted_home_score,
+      awayScore: record.predicted_away_score,
+      totalScore: record.predicted_total,
+      suggestedBet: determineSuggestedBet(
+        record.predicted_home_score - record.predicted_away_score,
+        record.fanduel_spread_home,
+        record.home_team,
+        record.away_team
+      ),
+      overUnder: record.predicted_total > record.fanduel_total ? 'Over' : 'Under',
+      fanduelSpreadHome: record.fanduel_spread_home,
+      fanduelTotal: record.fanduel_total,
+      homeTeamMoneyline: 0, // Not stored in DB
+      awayTeamMoneyline: 0, // Not stored in DB
+      actualHomeScore: record.actual_home_score || undefined,
+      actualAwayScore: record.actual_away_score || undefined,
+      gameStatus: record.actual_home_score ? 'Completed' : undefined,
+      spreadResult: record.spread_result || undefined,
+      totalResult: record.total_result || undefined
+    }));
+  } catch (error) {
+    console.error('Error fetching predictions:', error);
+    throw error;
+  }
 }
 
-export async function updateGameResults(
-  gameId: string,
-  homeScore: number,
-  awayScore: number
-) {
-  // Fetch the prediction first
-  const { data: predictions, error: fetchError } = await supabase
-    .from('predictions')
-    .select('*')
-    .eq('game_id', gameId)
-    .single();
+export async function savePrediction(prediction: Omit<PredictionRecord, 'id'>) {
+  try {
+    const { data: existing, error: checkError } = await supabase
+      .from('predictions')
+      .select('id')
+      .eq('game_id', prediction.game_id)
+      .single();
 
-  if (fetchError) throw fetchError;
-  if (!predictions) throw new Error('Prediction not found');
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error checking prediction:', checkError);
+      throw checkError;
+    }
 
-  const prediction = predictions as Prediction;
-  
-  // Calculate spread result
-  const actualSpread = homeScore - awayScore;
-  const predictedSpread = prediction.predicted_home_score - prediction.predicted_away_score;
-  const spreadResult = calculateSpreadResult(
-    actualSpread,
-    prediction.fanduel_spread_home
-  );
+    if (existing?.id) {
+      const { error: updateError } = await supabase
+        .from('predictions')
+        .update(prediction)
+        .eq('id', existing.id);
 
-  // Calculate total result
-  const actualTotal = homeScore + awayScore;
-  const totalResult = calculateTotalResult(
-    actualTotal,
-    prediction.fanduel_total
-  );
+      if (updateError) throw updateError;
+      console.log(`Updated prediction for game ${prediction.game_id}`);
+      return;
+    }
 
-  // Update the prediction with results
-  const { error: updateError } = await supabase
-    .from('predictions')
-    .update({
-      actual_home_score: homeScore,
-      actual_away_score: awayScore,
-      spread_result: spreadResult,
-      total_result: totalResult
-    })
-    .eq('game_id', gameId);
+    const { error: insertError } = await supabase
+      .from('predictions')
+      .insert([prediction]);
 
-  if (updateError) throw updateError;
+    if (insertError) throw insertError;
+    console.log(`Saved new prediction for game ${prediction.game_id}`);
+  } catch (error) {
+    console.error('Error in savePrediction:', error);
+    throw error;
+  }
 }
 
-function calculateSpreadResult(
-  actualSpread: number,
-  fanduelSpread: number
-): 'win' | 'loss' | 'push' {
-  if (actualSpread === fanduelSpread) return 'push';
-  return actualSpread > fanduelSpread ? 'win' : 'loss';
-}
+export async function getResults(date: string) {
+  try {
+    const { data, error } = await supabase
+      .from('predictions')
+      .select('spread_result,total_result')
+      .eq('game_date', date);
 
-function calculateTotalResult(
-  actualTotal: number,
-  fanduelTotal: number
-): 'win' | 'loss' | 'push' {
-  if (actualTotal === fanduelTotal) return 'push';
-  return actualTotal > fanduelTotal ? 'over' : 'under';
-}
+    if (error) throw error;
 
-export async function getResults() {
-  const { data, error } = await supabase
-    .from('predictions')
-    .select('*')
-    .not('spread_result', 'is', null);
-
-  if (error) throw error;
-
-  const results = data.reduce((acc, prediction) => {
-    return {
-      spread: {
-        wins: acc.spread.wins + (prediction.spread_result === 'win' ? 1 : 0),
-        losses: acc.spread.losses + (prediction.spread_result === 'loss' ? 1 : 0),
-        pushes: acc.spread.pushes + (prediction.spread_result === 'push' ? 1 : 0),
-      },
-      total: {
-        wins: acc.total.wins + (prediction.total_result === 'win' ? 1 : 0),
-        losses: acc.total.losses + (prediction.total_result === 'loss' ? 1 : 0),
-        pushes: acc.total.pushes + (prediction.total_result === 'push' ? 1 : 0),
-      }
+    const results = {
+      spread: { win: 0, loss: 0, push: 0 },
+      total: { win: 0, loss: 0, push: 0 },
+      date: format(new Date(date), 'MMM d, yyyy')
     };
-  }, {
-    spread: { wins: 0, losses: 0, pushes: 0 },
-    total: { wins: 0, losses: 0, pushes: 0 }
-  });
 
-  return results;
+    if (data) {
+      data.forEach(prediction => {
+        if (prediction.spread_result) {
+          results.spread[prediction.spread_result]++;
+        }
+        if (prediction.total_result) {
+          results.total[prediction.total_result]++;
+        }
+      });
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Error fetching results:', error);
+    return {
+      spread: { win: 0, loss: 0, push: 0 },
+      total: { win: 0, loss: 0, push: 0 },
+      date: format(new Date(date), 'MMM d, yyyy')
+    };
+  }
+}
+
+function determineSuggestedBet(
+  predictedSpread: number,
+  fanduelSpread: number,
+  homeTeam: string,
+  awayTeam: string
+): string {
+  const MINIMUM_EDGE = 2;
+  
+  if (Math.abs(predictedSpread - fanduelSpread) >= MINIMUM_EDGE) {
+    if (predictedSpread < Math.abs(fanduelSpread)) {
+      return fanduelSpread < 0 ? `Bet on ${awayTeam}` : `Bet on ${homeTeam}`;
+    } else {
+      return fanduelSpread < 0 ? `Bet on ${homeTeam}` : `Bet on ${awayTeam}`;
+    }
+  }
+  
+  return 'No clear edge';
 }

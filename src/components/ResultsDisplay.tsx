@@ -4,25 +4,30 @@ import { getResults } from '../services/supabase';
 
 interface Results {
   spread: {
-    wins: number;
-    losses: number;
-    pushes: number;
+    win: number;
+    loss: number;
+    push: number;
   };
   total: {
-    wins: number;
-    losses: number;
-    pushes: number;
+    win: number;
+    loss: number;
+    push: number;
   };
+  date: string;
 }
 
-export function ResultsDisplay() {
+interface ResultsDisplayProps {
+  selectedDate: string;
+}
+
+export function ResultsDisplay({ selectedDate }: ResultsDisplayProps) {
   const [results, setResults] = useState<Results | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadResults() {
       try {
-        const data = await getResults();
+        const data = await getResults(selectedDate);
         setResults(data);
       } catch (error) {
         console.error('Error loading results:', error);
@@ -32,7 +37,7 @@ export function ResultsDisplay() {
     }
 
     loadResults();
-  }, []);
+  }, [selectedDate]);
 
   if (loading) return <div>Loading results...</div>;
   if (!results) return null;
@@ -42,22 +47,26 @@ export function ResultsDisplay() {
     return ((wins / total) * 100).toFixed(1);
   };
 
-  const spreadTotal = results.spread.wins + results.spread.losses;
-  const totalTotal = results.total.wins + results.total.losses;
+  const spreadTotal = results.spread.win + results.spread.loss;
+  const totalTotal = results.total.win + results.total.loss;
+
+  if (spreadTotal === 0 && totalTotal === 0) {
+    return null;
+  }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6">
-      <h2 className="text-2xl font-bold mb-4">Betting Results</h2>
+    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+      <h2 className="text-2xl font-bold mb-4">Results for {results.date}</h2>
       
       <div className="grid grid-cols-2 gap-6">
         <div>
           <h3 className="text-lg font-semibold mb-2">Spread Bets</h3>
           <div className="space-y-2">
-            <p>Wins: {results.spread.wins}</p>
-            <p>Losses: {results.spread.losses}</p>
-            <p>Pushes: {results.spread.pushes}</p>
+            <p>Wins: {results.spread.win}</p>
+            <p>Losses: {results.spread.loss}</p>
+            <p>Pushes: {results.spread.push}</p>
             <p className="font-bold">
-              Win Rate: {calculateWinPercentage(results.spread.wins, spreadTotal)}%
+              Win Rate: {calculateWinPercentage(results.spread.win, spreadTotal)}%
             </p>
           </div>
         </div>
@@ -65,11 +74,11 @@ export function ResultsDisplay() {
         <div>
           <h3 className="text-lg font-semibold mb-2">Total Bets</h3>
           <div className="space-y-2">
-            <p>Wins: {results.total.wins}</p>
-            <p>Losses: {results.total.losses}</p>
-            <p>Pushes: {results.total.pushes}</p>
+            <p>Wins: {results.total.win}</p>
+            <p>Losses: {results.total.loss}</p>
+            <p>Pushes: {results.total.push}</p>
             <p className="font-bold">
-              Win Rate: {calculateWinPercentage(results.total.wins, totalTotal)}%
+              Win Rate: {calculateWinPercentage(results.total.win, totalTotal)}%
             </p>
           </div>
         </div>

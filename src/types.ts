@@ -11,11 +11,9 @@ export interface GamePrediction {
   fanduelTotal: number;
   homeTeamMoneyline: number;
   awayTeamMoneyline: number;
-}
-
-export interface TeamStats {
-  team: string;
-  ppg: number;
-  oppg: number;
-  pace: number;
+  actualHomeScore?: number;
+  actualAwayScore?: number;
+  gameStatus?: string;
+  spreadResult?: 'win' | 'loss' | 'push';
+  totalResult?: 'win' | 'loss' | 'push';
 }

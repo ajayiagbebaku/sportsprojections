@@ -1,28 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format, parseISO, startOfDay } from 'date-fns';
 import { Calendar, RefreshCw } from 'lucide-react';
 import { GameCard } from './components/GameCard';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { fetchNBAOdds } from './services/api';
-import { fetchAndUpdateScores } from './services/scores';
 import type { GamePrediction } from './types';
 
 function App() {
   const [predictions, setPredictions] = useState<GamePrediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const today = new Date();
+  // Initialize with current date in local timezone
+  const [selectedDate, setSelectedDate] = useState(format(startOfDay(new Date()), 'yyyy-MM-dd'));
 
   const loadPredictions = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      // Fetch and update scores for previous predictions
-      await fetchAndUpdateScores(today);
-      
-      // Get new predictions
-      const data = await fetchNBAOdds(format(today, 'yyyyMMdd'));
+      const data = await fetchNBAOdds(selectedDate);
       setPredictions(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
@@ -34,7 +29,7 @@ function App() {
 
   useEffect(() => {
     loadPredictions();
-  }, []);
+  }, [selectedDate]);
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -43,9 +38,16 @@ function App() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold">SportsProjections.com</h1>
-              <div className="flex items-center mt-2 text-blue-200">
-                <Calendar className="w-5 h-5 mr-2" />
-                <span>{format(today, 'MMMM d, yyyy')}</span>
+              <div className="flex items-center mt-2 space-x-4">
+                <div className="flex items-center text-blue-200">
+                  <Calendar className="w-5 h-5 mr-2" />
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-transparent border border-blue-400 rounded px-2 py-1 text-white"
+                  />
+                </div>
               </div>
             </div>
             <button 
@@ -61,7 +63,7 @@ function App() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <ResultsDisplay />
+        <ResultsDisplay selectedDate={selectedDate} />
 
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
@@ -84,7 +86,8 @@ function App() {
               </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-gray-500 text-lg">No games scheduled for today.</p>
+                <p className="text-gray-500 text-lg">No games found for selected date.</p>
+                <p className="text-gray-400 mt-2">Try selecting a different date.</p>
               </div>
             )}
           </>
@@ -94,7 +97,7 @@ function App() {
       <footer className="bg-white border-t border-gray-200 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <p className="text-center text-gray-500 text-sm">
-            SportsProjections.com • {format(today, 'yyyy')} • Powered by Agbebaku Enterprises
+            SportsProjections.com • {format(new Date(), 'yyyy')} • Powered by Agbebaku Enterprises
           </p>
         </div>
       </footer>

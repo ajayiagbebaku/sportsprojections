@@ -1,0 +1,29 @@
+name: Update NBA Predictions
+
+on:
+  schedule:
+    - cron: '0 10 * * *'  # Runs daily at 10:00 UTC (5:00 AM EST)
+  workflow_dispatch:      # Allows manual trigger
+
+jobs:
+  update-predictions:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Update predictions and scores
+        run: node scripts/update-predictions.js
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          RAPIDAPI_HOST: ${{ secrets.RAPIDAPI_HOST }}

@@ -39,29 +39,25 @@ export function generatePrediction(
 
   const totalScore = homeScore + awayScore;
   const projectedSpread = homeScore - awayScore;
-  
+
   // Betting logic:
-  // If home team is favored (negative spread):
-  // - We need them to win by MORE than the spread amount
-  // If home team is underdog (positive spread):
-  // - They can lose by less than the spread amount or win outright
-  
+  // If our projected spread is better than the Vegas spread by at least 2 points,
+  // we have an edge
   const MINIMUM_EDGE = 2;
   let suggestedBet = 'No clear edge';
 
+  // Example: 
+  // Vegas: Lakers -4 (fanduelSpreadHome = -4)
+  // Our projection: Lakers win by 1 (projectedSpread = 1)
+  // 1 < |-4| so bet on the other team (not covering the spread)
+  
   if (Math.abs(projectedSpread - fanduelSpreadHome) >= MINIMUM_EDGE) {
-    // For negative spread (home favorite), we need projectedSpread > |fanduelSpreadHome|
-    // For positive spread (home underdog), we need projectedSpread > -fanduelSpreadHome
-    if (fanduelSpreadHome <= 0) {
-      // Home team is favored
-      suggestedBet = projectedSpread > Math.abs(fanduelSpreadHome)
-        ? `Bet on ${homeTeam}` // Projected to cover
-        : `Bet on ${awayTeam}`; // Not projected to cover
+    if (projectedSpread < Math.abs(fanduelSpreadHome)) {
+      // Our projection shows the favorite won't cover
+      suggestedBet = fanduelSpreadHome < 0 ? `Bet on ${awayTeam}` : `Bet on ${homeTeam}`;
     } else {
-      // Away team is favored
-      suggestedBet = projectedSpread > -fanduelSpreadHome
-        ? `Bet on ${homeTeam}` // Projected to cover
-        : `Bet on ${awayTeam}`; // Not projected to cover
+      // Our projection shows the favorite will cover
+      suggestedBet = fanduelSpreadHome < 0 ? `Bet on ${homeTeam}` : `Bet on ${awayTeam}`;
     }
   }
 
