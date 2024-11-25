@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { format, parseISO, startOfDay } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import { Calendar, RefreshCw } from 'lucide-react';
 import { GameCard } from './components/GameCard';
-import { ResultsDisplay } from './components/ResultsDisplay';
+import { ResultsHistory } from './components/ResultsHistory';
 import { fetchNBAOdds } from './services/api';
 import type { GamePrediction } from './types';
 
@@ -10,8 +10,8 @@ function App() {
   const [predictions, setPredictions] = useState<GamePrediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Initialize with current date in local timezone
   const [selectedDate, setSelectedDate] = useState(format(startOfDay(new Date()), 'yyyy-MM-dd'));
+  const [showResults, setShowResults] = useState(false);
 
   const loadPredictions = async () => {
     try {
@@ -30,6 +30,27 @@ function App() {
   useEffect(() => {
     loadPredictions();
   }, [selectedDate]);
+
+  if (showResults) {
+    return (
+      <div>
+        <header className="bg-gradient-to-r from-blue-800 to-blue-900 text-white">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div className="flex justify-between items-center">
+              <h1 className="text-3xl font-bold">SportsProjections.com</h1>
+              <button
+                onClick={() => setShowResults(false)}
+                className="bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-lg transition-colors duration-200"
+              >
+                View Predictions
+              </button>
+            </div>
+          </div>
+        </header>
+        <ResultsHistory />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -50,21 +71,27 @@ function App() {
                 </div>
               </div>
             </div>
-            <button 
-              onClick={loadPredictions}
-              disabled={loading}
-              className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-              <span>{loading ? 'Loading...' : 'Refresh'}</span>
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowResults(true)}
+                className="bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-lg transition-colors duration-200"
+              >
+                View Results
+              </button>
+              <button 
+                onClick={loadPredictions}
+                disabled={loading}
+                className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                <span>{loading ? 'Loading...' : 'Refresh'}</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <ResultsDisplay selectedDate={selectedDate} />
-
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
             {error}
