@@ -2,21 +2,21 @@ import axios from 'axios';
 import { format, subDays } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 
+const SUPABASE_URL = 'https://yjebzlvsjonvxfpcuwaa.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZWJ6bHZzam9udnhmcGN1d2FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzIzNDI0MjAsImV4cCI6MjA0NzkxODQyMH0.s7pBFZGY1ZORMVSGQGpcp7GsiMzGOBeUIf2EapJ5yzU';
 const RAPIDAPI_KEY = '2d2c1f1b92msh6a8546438f75ab7p18f644jsnfa55639522ed';
 const RAPIDAPI_HOST = 'tank01-fantasy-stats.p.rapidapi.com';
 
-const supabase = createClient(
-  'https://yjebzlvsjonvxfpcuwaa.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZWJ6bHZzam9udnhmcGN1d2FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzIzNDI0MjAsImV4cCI6MjA0NzkxODQyMH0.s7pBFZGY1ZORMVSGQGpcp7GsiMzGOBeUIf2EapJ5yzU'
-);
+// Initialize Supabase client
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-async function fetchAndProcessScores() {
+async function fetchAndSaveScores() {
   try {
     // Get yesterday's date in YYYYMMDD format
     const yesterday = subDays(new Date(), 1);
     const formattedDate = format(yesterday, 'yyyyMMdd');
     
-    console.log('Fetching scores for:', formattedDate);
+    console.log('Fetching scores for date:', formattedDate);
 
     const response = await axios.get('https://tank01-fantasy-stats.p.rapidapi.com/getNBAScoresOnly', {
       headers: {
@@ -30,7 +30,7 @@ async function fetchAndProcessScores() {
       }
     });
 
-    if (response.data?.statusCode !== 200 || !response.data?.body) {
+    if (!response.data?.body) {
       console.log('No games found for date:', formattedDate);
       return;
     }
@@ -38,63 +38,107 @@ async function fetchAndProcessScores() {
     const games = response.data.body;
     console.log(`Found ${Object.keys(games).length} games`);
 
-    // Process each game
     for (const [gameId, game] of Object.entries(games)) {
-      if (game.gameStatus === 'Completed' || game.gameClock === 'Final') {
-        const actualHomeScore = parseInt(game.homePts);
-        const actualAwayScore = parseInt(game.awayPts);
+      try {
+        // Validate scores
+        const awayScore = parseInt(game.awayPts);
+        const homeScore = parseInt(game.homePts);
 
-        if (isNaN(actualHomeScore) || isNaN(actualAwayScore)) {
+        if (isNaN(awayScore) || isNaN(homeScore)) {
           console.warn(`Invalid scores for game ${gameId}`);
           continue;
         }
 
-        // Get prediction for this game
-        const { data: prediction, error: predictionError } = await supabase
-          .from('predictions')
-          .select('*')
-          .eq('game_id', gameId)
-          .single();
+        // Prepare game record exactly matching your CSV format
+        const gameRecord = {
+          game_id: gameId,
+          away_team: game.away,
+          home_team: game.home,
+          away_score: awayScore,
+          home_score: homeScore,
+          game_status: game.gameStatus || 'Unknown',
+          game_clock: game.gameClock || null,
+          game_time: game.gameTime || null
+        };
 
-        if (predictionError) {
-          console.warn(`No prediction found for game ${gameId}`);
+        console.log('Saving game record:', gameRecord);
+
+        // Save to Supabase
+        const { error } = await supabase
+          .from('game_scores')
+          .upsert(gameRecord, {
+            onConflict: 'game_id',
+            returning: 'minimal'
+          });
+
+        if (error) {
+          console.error(`Error saving game ${gameId}:`, error);
           continue;
         }
 
-        // Calculate betting results
-        const spreadResult = calculateSpreadResult(
-          actualHomeScore,
-          actualAwayScore,
-          prediction.fanduel_spread_home
-        );
+        console.log(`Successfully saved game ${gameId}`);
 
-        const totalResult = calculateTotalResult(
-          actualHomeScore + actualAwayScore,
-          prediction.fanduel_total
-        );
-
-        // Update prediction with results
-        const { error: updateError } = await supabase
-          .from('predictions')
-          .update({
-            actual_home_score: actualHomeScore,
-            actual_away_score: actualAwayScore,
-            spread_result: spreadResult,
-            total_result: totalResult,
-            game_status: 'Completed'
-          })
-          .eq('game_id', gameId);
-
-        if (updateError) {
-          console.error(`Error updating game ${gameId}:`, updateError);
-        } else {
-          console.log(`Updated results for game ${gameId}: Spread ${spreadResult}, Total ${totalResult}`);
+        // If game is completed, update predictions table
+        if (game.gameStatus === 'Completed' || game.gameClock === 'Final') {
+          await updatePredictionResults(gameId, homeScore, awayScore);
         }
+      } catch (error) {
+        console.error(`Error processing game ${gameId}:`, error);
       }
     }
+
+    console.log('Finished processing all games');
   } catch (error) {
-    console.error('Error processing scores:', error);
+    console.error('Error fetching scores:', error);
     throw error;
+  }
+}
+
+async function updatePredictionResults(gameId, homeScore, awayScore) {
+  try {
+    // Get prediction for this game
+    const { data: prediction, error: predictionError } = await supabase
+      .from('predictions')
+      .select('*')
+      .eq('game_id', gameId)
+      .single();
+
+    if (predictionError) {
+      console.warn(`No prediction found for game ${gameId}`);
+      return;
+    }
+
+    // Calculate results
+    const spreadResult = calculateSpreadResult(
+      homeScore,
+      awayScore,
+      prediction.fanduel_spread_home
+    );
+
+    const totalResult = calculateTotalResult(
+      homeScore + awayScore,
+      prediction.fanduel_total
+    );
+
+    // Update prediction with results
+    const { error: updateError } = await supabase
+      .from('predictions')
+      .update({
+        actual_home_score: homeScore,
+        actual_away_score: awayScore,
+        spread_result: spreadResult,
+        total_result: totalResult,
+        game_status: 'Completed'
+      })
+      .eq('game_id', gameId);
+
+    if (updateError) {
+      console.error(`Error updating prediction for game ${gameId}:`, updateError);
+    } else {
+      console.log(`Updated prediction results for game ${gameId}`);
+    }
+  } catch (error) {
+    console.error(`Error updating prediction results for game ${gameId}:`, error);
   }
 }
 
@@ -117,4 +161,12 @@ function calculateTotalResult(actualTotal, predictedTotal) {
 }
 
 // Run the script
-fetchAndProcessScores();
+fetchAndSaveScores()
+  .then(() => {
+    console.log('Script completed successfully');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('Script failed:', error);
+    process.exit(1);
+  });
