@@ -1,12 +1,21 @@
 import axios from 'axios';
-import { format, parseISO, startOfDay, subDays } from 'date-fns';
+import { format, parseISO, startOfDay } from 'date-fns';
 import { generatePrediction } from './statsService';
-import { savePrediction, getPredictions, updateGameResults } from './supabase';
+import { savePrediction, getPredictions } from './supabase';
 import type { GamePrediction } from '../types';
 
-// Create axios instance for our proxy server
+const API_KEY = '2d2c1f1b92msh6a8546438f75ab7p18f644jsnfa55639522ed';
+const API_HOST = 'tank01-fantasy-stats.p.rapidapi.com';
+
+// Create axios instance based on environment
 const api = axios.create({
-  baseURL: 'http://localhost:3001/api'
+  baseURL: import.meta.env.PROD 
+    ? 'https://tank01-fantasy-stats.p.rapidapi.com'
+    : 'http://localhost:3001/api',
+  headers: import.meta.env.PROD ? {
+    'X-RapidAPI-Key': API_KEY,
+    'X-RapidAPI-Host': API_HOST,
+  } : {}
 });
 
 export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]> {
@@ -26,8 +35,31 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
     
     // Fetch odds and scores
     const [oddsResponse, scoresResponse] = await Promise.all([
-      api.get('/odds', { params: { gameDate: formattedDate } }),
-      api.get('/scores', { params: { gameDate: formattedDate } })
+      import.meta.env.PROD
+        ? api.get('/getNBABettingOdds', { 
+            params: { 
+              gameDate: formattedDate,
+              itemFormat: 'list'
+            }
+          })
+        : api.get('/odds', { 
+            params: { 
+              gameDate: formattedDate 
+            }
+          }),
+      import.meta.env.PROD
+        ? api.get('/getNBAScoresOnly', {
+            params: {
+              gameDate: formattedDate,
+              topPerformers: 'false',
+              lineups: 'false'
+            }
+          })
+        : api.get('/scores', { 
+            params: { 
+              gameDate: formattedDate 
+            }
+          })
     ]);
 
     if (!oddsResponse.data?.body || typeof oddsResponse.data.body !== 'object') {
