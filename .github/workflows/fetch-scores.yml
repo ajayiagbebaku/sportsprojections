@@ -1,0 +1,31 @@
+name: Fetch NBA Scores
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # 2 AM CST (8 AM UTC)
+  workflow_dispatch:      # Allow manual trigger
+
+jobs:
+  fetch-scores:
+    runs-on: ubuntu-latest
+    
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      RAPIDAPI_HOST: ${{ secrets.RAPIDAPI_HOST }}
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Fetch and process scores
+        run: node scripts/fetch-scores.js

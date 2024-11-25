@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "update-stats": "node .github/scripts/update-stats.js",
     "setup-db": "node scripts/setup-database.js",
-    "backfill": "node scripts/backfill-data.js"
+    "backfill": "node scripts/backfill-data.js",
+    "fetch-scores": "node scripts/fetch-scores.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
