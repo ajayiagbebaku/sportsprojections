@@ -25,7 +25,28 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm install axios date-fns @supabase/supabase-js
+
+      - name: Validate environment variables
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "Error: SUPABASE_URL is not set"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "Error: SUPABASE_KEY is not set"
+            exit 1
+          fi
+          if [ -z "$RAPIDAPI_KEY" ]; then
+            echo "Error: RAPIDAPI_KEY is not set"
+            exit 1
+          fi
+          if [ -z "$RAPIDAPI_HOST" ]; then
+            echo "Error: RAPIDAPI_HOST is not set"
+            exit 1
+          fi
 
       - name: Fetch and process scores
         run: node scripts/fetch-scores.js
