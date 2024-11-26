@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { format, startOfDay } from 'date-fns';
+import { format, startOfToday } from 'date-fns';
 import { Calendar, RefreshCw } from 'lucide-react';
 import { GameCard } from './components/GameCard';
 import { ResultsHistory } from './components/ResultsHistory';
@@ -10,7 +10,7 @@ function App() {
   const [predictions, setPredictions] = useState<GamePrediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(format(startOfDay(new Date()), 'yyyy-MM-dd'));
+  const [selectedDate, setSelectedDate] = useState(format(startOfToday(), 'yyyy-MM-dd'));
   const [showResults, setShowResults] = useState(false);
 
   const loadPredictions = async () => {
@@ -67,6 +67,7 @@ function App() {
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     className="bg-transparent border border-blue-400 rounded px-2 py-1 text-white"
+                    max={format(startOfToday(), 'yyyy-MM-dd')}
                   />
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { format, parseISO, startOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { generatePrediction } from './statsService';
 import { savePrediction, getPredictions } from './supabase';
 import type { GamePrediction } from '../types';
@@ -28,9 +28,7 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
     }
 
     // If no cached data, fetch from API
-    const date = parseISO(dateString);
-    const formattedDate = format(date, 'yyyyMMdd');
-    
+    const formattedDate = format(new Date(dateString), 'yyyyMMdd');
     console.log('Fetching fresh data for date:', formattedDate);
     
     // Fetch odds and scores
@@ -107,8 +105,8 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
         const actualAwayScore = gameScore?.awayPts ? parseInt(gameScore.awayPts) : undefined;
         const gameStatus = gameScore?.gameStatus || (gameScore?.gameClock === 'Final' ? 'Completed' : undefined);
 
-        // Generate prediction
-        const prediction = generatePrediction(
+        // Generate prediction using database stats
+        const prediction = await generatePrediction(
           homeTeamKey,
           awayTeamKey,
           fanduelSpreadHome,
@@ -164,7 +162,7 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
   }
 }
 
-// Map API team codes to the format used in teamStats
+// Map API team codes to database team names
 const teamCodeMapping: Record<string, string> = {
   'ATL': 'Atlanta',
   'BOS': 'Boston',

@@ -11,7 +11,11 @@
     "update-stats": "node .github/scripts/update-stats.js",
     "setup-db": "node scripts/setup-database.js",
     "backfill": "node scripts/backfill-data.js",
-    "fetch-scores": "node scripts/fetch-scores.js"
+    "fetch-scores": "node scripts/fetch-scores.js",
+    "backfill-scores": "node scripts/backfill-scores.js",
+    "verify-predictions": "node scripts/verify-predictions.js",
+    "backfill-predictions": "node scripts/backfill-predictions.js",
+    "fetch-schedule": "node scripts/fetch-season-schedule.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
