@@ -71,7 +71,7 @@ async function fetchScheduleForDate(date) {
     const games = [];
     for (const game of response.data.body) {
       // Validate required game data
-      if (!game?.gameID || !game?.home || !game?.away) {
+      if (!game?.gameID || !game?.home || !game?.away || !game?.teamIDHome || !game?.teamIDAway) {
         console.warn(`Invalid game data:`, game);
         continue;
       }
@@ -89,7 +89,9 @@ async function fetchScheduleForDate(date) {
         game_id: game.gameID,
         game_date: format(date, 'yyyy-MM-dd'),
         home_team: homeTeam,
-        away_team: awayTeam
+        away_team: awayTeam,
+        team_id_home: game.teamIDHome,
+        team_id_away: game.teamIDAway
       });
     }
 
