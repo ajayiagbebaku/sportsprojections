@@ -68,16 +68,30 @@ async function fetchScheduleForDate(date) {
       return [];
     }
 
-    return response.data.body.map(game => ({
-      game_id: `${formattedDate}_${game.awayTeam}@${game.homeTeam}`,
-      game_date: format(date, 'yyyy-MM-dd'),
-      home_team: teamCodeMapping[game.homeTeam],
-      away_team: teamCodeMapping[game.awayTeam],
-      game_time: game.gameTime || null,
-      arena: game.arena || null,
-      city: game.city || null,
-      state: game.state || null
-    }));
+    const games = [];
+    for (const game of response.data.body) {
+      const homeTeam = teamCodeMapping[game.homeTeam];
+      const awayTeam = teamCodeMapping[game.awayTeam];
+
+      // Skip games where team mapping is not found
+      if (!homeTeam || !awayTeam) {
+        console.warn(`Invalid team mapping for game: ${game.homeTeam} vs ${game.awayTeam}`);
+        continue;
+      }
+
+      games.push({
+        game_id: `${formattedDate}_${game.awayTeam}@${game.homeTeam}`,
+        game_date: format(date, 'yyyy-MM-dd'),
+        home_team: homeTeam,
+        away_team: awayTeam,
+        game_time: game.gameTime || null,
+        arena: game.arena || null,
+        city: game.city || null,
+        state: game.state || null
+      });
+    }
+
+    return games;
   } catch (error) {
     console.error(`Error fetching schedule for ${formattedDate}:`, error.message);
     return [];
