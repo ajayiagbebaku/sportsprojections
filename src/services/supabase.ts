@@ -5,11 +5,7 @@ import type { GamePrediction } from '../types';
 const supabaseUrl = 'https://yjebzlvsjonvxfpcuwaa.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZWJ6bHZzam9udnhmcGN1d2FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzIzNDI0MjAsImV4cCI6MjA0NzkxODQyMH0.s7pBFZGY1ZORMVSGQGpcp7GsiMzGOBeUIf2EapJ5yzU';
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  db: {
-    schema: 'public'
-  }
-});
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 interface PredictionRecord {
   id?: number;
@@ -17,11 +13,15 @@ interface PredictionRecord {
   game_date: string;
   home_team: string;
   away_team: string;
+  team_id_home: string;
+  team_id_away: string;
   predicted_home_score: number;
   predicted_away_score: number;
   predicted_total: number;
   fanduel_spread_home: number;
   fanduel_total: number;
+  home_moneyline?: number;
+  away_moneyline?: number;
   actual_home_score?: number | null;
   actual_away_score?: number | null;
   spread_result?: 'win' | 'loss' | 'push' | null;
@@ -54,8 +54,8 @@ export async function getPredictions(date: string): Promise<GamePrediction[]> {
       overUnder: record.predicted_total > record.fanduel_total ? 'Over' : 'Under',
       fanduelSpreadHome: record.fanduel_spread_home,
       fanduelTotal: record.fanduel_total,
-      homeTeamMoneyline: 0, // Not stored in DB
-      awayTeamMoneyline: 0, // Not stored in DB
+      homeTeamMoneyline: record.home_moneyline || 0,
+      awayTeamMoneyline: record.away_moneyline || 0,
       actualHomeScore: record.actual_home_score || undefined,
       actualAwayScore: record.actual_away_score || undefined,
       gameStatus: record.actual_home_score ? 'Completed' : undefined,
@@ -101,43 +101,6 @@ export async function savePrediction(prediction: Omit<PredictionRecord, 'id'>) {
   } catch (error) {
     console.error('Error in savePrediction:', error);
     throw error;
-  }
-}
-
-export async function getResults(date: string) {
-  try {
-    const { data, error } = await supabase
-      .from('predictions')
-      .select('spread_result,total_result')
-      .eq('game_date', date);
-
-    if (error) throw error;
-
-    const results = {
-      spread: { win: 0, loss: 0, push: 0 },
-      total: { win: 0, loss: 0, push: 0 },
-      date: format(new Date(date), 'MMM d, yyyy')
-    };
-
-    if (data) {
-      data.forEach(prediction => {
-        if (prediction.spread_result) {
-          results.spread[prediction.spread_result]++;
-        }
-        if (prediction.total_result) {
-          results.total[prediction.total_result]++;
-        }
-      });
-    }
-
-    return results;
-  } catch (error) {
-    console.error('Error fetching results:', error);
-    return {
-      spread: { win: 0, loss: 0, push: 0 },
-      total: { win: 0, loss: 0, push: 0 },
-      date: format(new Date(date), 'MMM d, yyyy')
-    };
   }
 }
 

@@ -5,38 +5,32 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-interface TeamStats {
-  team_name: string;
-  team_code: string;
-  ppg: number;
-  oppg: number;
-  pace: number;
-}
-
 export async function generatePrediction(
   homeTeam: string,
   awayTeam: string,
+  homeTeamId: string,
+  awayTeamId: string,
   fanduelSpreadHome: number,
   fanduelTotal: number,
   isPlayoffs: boolean = false
 ) {
   try {
-    // Fetch team stats from database
+    // Fetch team stats from database using team IDs
     const { data: teams, error } = await supabase
       .from('team_stats')
       .select('*')
-      .in('team_name', [homeTeam, awayTeam]);
+      .in('team_id', [homeTeamId, awayTeamId]);
 
     if (error) throw error;
     if (!teams || teams.length !== 2) {
-      throw new Error(`Stats not found for ${homeTeam} or ${awayTeam}`);
+      throw new Error(`Stats not found for teams ${homeTeamId} or ${awayTeamId}`);
     }
 
-    const homeStats = teams.find(t => t.team_name === homeTeam);
-    const awayStats = teams.find(t => t.team_name === awayTeam);
+    const homeStats = teams.find(t => t.team_id === homeTeamId);
+    const awayStats = teams.find(t => t.team_id === awayTeamId);
 
     if (!homeStats || !awayStats) {
-      throw new Error(`Stats not found for ${homeTeam} or ${awayTeam}`);
+      throw new Error(`Stats not found for teams ${homeTeamId} or ${awayTeamId}`);
     }
 
     // Calculate base scores using team stats
