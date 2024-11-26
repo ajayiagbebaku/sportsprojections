@@ -48,28 +48,41 @@ const teamCodeMapping = {
   'WAS': 'Washington'
 };
 
-async function fetchScheduleForDate(date) {
+async function fetchScheduleAndOdds(date) {
   const formattedDate = format(date, 'yyyyMMdd');
-  console.log(`Fetching schedule for ${formattedDate}`);
+  console.log(`Fetching schedule and odds for ${formattedDate}`);
 
   try {
-    const response = await axios.get('https://tank01-fantasy-stats.p.rapidapi.com/getNBAGamesForDate', {
-      headers: {
-        'X-RapidAPI-Key': RAPIDAPI_KEY,
-        'X-RapidAPI-Host': RAPIDAPI_HOST
-      },
-      params: {
-        gameDate: formattedDate
-      }
-    });
+    // Fetch both schedule and odds in parallel
+    const [scheduleResponse, oddsResponse] = await Promise.all([
+      axios.get('https://tank01-fantasy-stats.p.rapidapi.com/getNBAGamesForDate', {
+        headers: {
+          'X-RapidAPI-Key': RAPIDAPI_KEY,
+          'X-RapidAPI-Host': RAPIDAPI_HOST
+        },
+        params: { gameDate: formattedDate }
+      }),
+      axios.get('https://tank01-fantasy-stats.p.rapidapi.com/getNBABettingOdds', {
+        headers: {
+          'X-RapidAPI-Key': RAPIDAPI_KEY,
+          'X-RapidAPI-Host': RAPIDAPI_HOST
+        },
+        params: {
+          gameDate: formattedDate,
+          itemFormat: 'list'
+        }
+      })
+    ]);
 
-    if (!response.data?.body || !Array.isArray(response.data.body)) {
+    if (!scheduleResponse.data?.body || !Array.isArray(scheduleResponse.data.body)) {
       console.log(`No valid games data found for ${formattedDate}`);
       return [];
     }
 
     const games = [];
-    for (const game of response.data.body) {
+    const odds = oddsResponse.data?.body || {};
+
+    for (const game of scheduleResponse.data.body) {
       // Validate required game data
       if (!game?.gameID || !game?.home || !game?.away || !game?.teamIDHome || !game?.teamIDAway) {
         console.warn(`Invalid game data:`, game);
@@ -85,20 +98,53 @@ async function fetchScheduleForDate(date) {
         continue;
       }
 
-      games.push({
+      // Get odds for this game
+      const gameOdds = odds[game.gameID];
+      const fanduelOdds = gameOdds?.sportsBooks?.find(book => 
+        book.sportsBook.toLowerCase() === 'fanduel'
+      )?.odds;
+
+      // Save game schedule
+      const gameRecord = {
         game_id: game.gameID,
         game_date: format(date, 'yyyy-MM-dd'),
         home_team: homeTeam,
         away_team: awayTeam,
         team_id_home: game.teamIDHome,
         team_id_away: game.teamIDAway
-      });
+      };
+
+      games.push(gameRecord);
+
+      // Save odds if available
+      if (fanduelOdds) {
+        const oddsRecord = {
+          game_id: game.gameID,
+          game_date: format(date, 'yyyy-MM-dd'),
+          spread_home: parseFloat(fanduelOdds.homeTeamSpread),
+          total: parseFloat(fanduelOdds.totalOver),
+          home_moneyline: parseInt(fanduelOdds.homeTeamMLOdds),
+          away_moneyline: parseInt(fanduelOdds.awayTeamMLOdds)
+        };
+
+        // Save odds to database
+        const { error: oddsError } = await supabase
+          .from('game_odds')
+          .upsert(oddsRecord, {
+            onConflict: 'game_id',
+            returning: 'minimal'
+          });
+
+        if (oddsError) {
+          console.error(`Error saving odds for game ${game.gameID}:`, oddsError);
+        }
+      }
     }
 
     console.log(`Found ${games.length} valid games for ${formattedDate}`);
     return games;
   } catch (error) {
-    console.error(`Error fetching schedule for ${formattedDate}:`, error.message);
+    console.error(`Error fetching data for ${formattedDate}:`, error.message);
     if (error.response) {
       console.error('API Error Response:', error.response.data);
     }
@@ -127,10 +173,21 @@ async function fetchEntireSeason() {
       return;
     }
 
+    // Clear existing odds
+    const { error: clearOddsError } = await supabase
+      .from('game_odds')
+      .delete()
+      .neq('id', 0);
+
+    if (clearOddsError) {
+      console.error('Error clearing existing odds:', clearOddsError);
+      return;
+    }
+
     let totalGames = 0;
     // Fetch schedule for each date
     while (currentDate <= endDate) {
-      const games = await fetchScheduleForDate(currentDate);
+      const games = await fetchScheduleAndOdds(currentDate);
       
       if (games.length > 0) {
         const { error } = await supabase
