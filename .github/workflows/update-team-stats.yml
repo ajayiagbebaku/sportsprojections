@@ -2,27 +2,41 @@ name: Update NBA Team Stats
 
 on:
   schedule:
-    - cron: '0 8 * * *'  # Run daily at 8:00 UTC (2:00 AM CST)
-  workflow_dispatch:      # Allow manual trigger
+    - cron: "0 8 * * *" # Run daily at 8:00 UTC (2:00 AM CST)
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
   update-stats:
     runs-on: ubuntu-latest
-    
+
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
-        run: npm install axios cheerio @supabase/supabase-js
+        run: |
+          npm install -g npm@latest
+          npm install axios cheerio @supabase/supabase-js
+
+      - name: Validate environment variables
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "Error: SUPABASE_URL is not set"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_KEY" ]; then
+            echo "Error: SUPABASE_KEY is not set"
+            exit 1
+          fi
 
       - name: Update team stats
         run: node .github/scripts/update-stats.js

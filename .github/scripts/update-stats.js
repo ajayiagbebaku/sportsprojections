@@ -1,5 +1,5 @@
 import axios from 'axios';
-import cheerio from 'cheerio';
+import * as cheerio from 'cheerio';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://yjebzlvsjonvxfpcuwaa.supabase.co';
@@ -41,17 +41,15 @@ const teamCodeMapping = {
   'WAS': 'Washington'
 };
 
-async function fetchNBAStats() {
+async function fetchAndUpdateStats() {
   try {
     console.log('Fetching NBA team stats...');
     const response = await axios.get('https://www.nbastuffer.com/2024-2025-nba-team-stats/');
     const $ = cheerio.load(response.data);
     
-    const stats = [];
-    
     // Process the stats table
-    $('table tr').each((i, row) => {
-      if (i === 0) return; // Skip header row
+    $('table tr').each(async (i, row) => {
+      if (i === 0) return; // Skip header
       
       const cols = $(row).find('td');
       if (cols.length > 0) {
@@ -64,58 +62,35 @@ async function fetchNBAStats() {
           const pace = parseFloat($(cols[5]).text());
 
           if (!isNaN(ppg) && !isNaN(oppg) && !isNaN(pace)) {
-            stats.push({
-              team_name: teamName,
-              team_code: teamCode,
-              ppg,
-              oppg,
-              pace,
-              updated_at: new Date().toISOString()
-            });
+            // Update stats in database
+            const { error } = await supabase
+              .from('team_stats')
+              .update({
+                ppg: ppg,
+                oppg: oppg,
+                pace: pace,
+                updated_at: new Date().toISOString()
+              })
+              .eq('team_code', teamCode);
+
+            if (error) {
+              console.error(`Error updating stats for ${teamCode}:`, error);
+            } else {
+              console.log(`Updated stats for ${teamCode}`);
+            }
           }
         }
       }
     });
 
-    return stats;
+    console.log('Stats update completed');
   } catch (error) {
-    console.error('Error fetching NBA stats:', error);
+    console.error('Error updating stats:', error);
     throw error;
   }
 }
 
-async function updateTeamStats() {
-  try {
-    console.log('Starting team stats update...');
-    
-    // Fetch current stats
-    const stats = await fetchNBAStats();
-    console.log(`Fetched stats for ${stats.length} teams`);
-
-    // Update each team's stats in the database
-    for (const stat of stats) {
-      const { error } = await supabase
-        .from('team_stats')
-        .upsert(stat, {
-          onConflict: 'team_code',
-          returning: 'minimal'
-        });
-
-      if (error) {
-        console.error(`Error updating stats for ${stat.team_name}:`, error);
-      } else {
-        console.log(`Updated stats for ${stat.team_name}`);
-      }
-    }
-
-    console.log('Team stats update completed successfully');
-  } catch (error) {
-    console.error('Failed to update team stats:', error);
-    process.exit(1);
-  }
-}
-
 // Run the update
-updateTeamStats()
+fetchAndUpdateStats()
   .then(() => process.exit(0))
   .catch(() => process.exit(1));
