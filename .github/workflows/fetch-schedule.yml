@@ -1,17 +1,17 @@
-name: Update NBA Team Stats
+name: Fetch NBA Schedule
 
 on:
-  schedule:
-    - cron: '0 8 * * *'  # Run daily at 8:00 UTC (2:00 AM CST)
-  workflow_dispatch:      # Allow manual trigger
+  workflow_dispatch:      # Only manual trigger
 
 jobs:
-  update-stats:
+  fetch-schedule:
     runs-on: ubuntu-latest
     
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      RAPIDAPI_HOST: ${{ secrets.RAPIDAPI_HOST }}
 
     steps:
       - uses: actions/checkout@v4
@@ -24,8 +24,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm install -g npm@latest
-          npm install axios cheerio @supabase/supabase-js
+          npm ci
+          npm install axios date-fns @supabase/supabase-js
 
       - name: Validate environment variables
         run: |
@@ -37,6 +37,14 @@ jobs:
             echo "Error: SUPABASE_KEY is not set"
             exit 1
           fi
+          if [ -z "$RAPIDAPI_KEY" ]; then
+            echo "Error: RAPIDAPI_KEY is not set"
+            exit 1
+          fi
+          if [ -z "$RAPIDAPI_HOST" ]; then
+            echo "Error: RAPIDAPI_HOST is not set"
+            exit 1
+          fi
 
-      - name: Update team stats
-        run: node .github/scripts/update-stats.js
+      - name: Fetch NBA schedule
+        run: node scripts/fetch-season-schedule.js
