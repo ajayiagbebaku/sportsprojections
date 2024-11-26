@@ -63,37 +63,43 @@ async function fetchScheduleForDate(date) {
       }
     });
 
-    if (!response.data?.body) {
-      console.log(`No games found for ${formattedDate}`);
+    if (!response.data?.body || !Array.isArray(response.data.body)) {
+      console.log(`No valid games data found for ${formattedDate}`);
       return [];
     }
 
     const games = [];
     for (const game of response.data.body) {
-      const homeTeam = teamCodeMapping[game.homeTeam];
-      const awayTeam = teamCodeMapping[game.awayTeam];
+      // Validate required game data
+      if (!game?.gameID || !game?.home || !game?.away) {
+        console.warn(`Invalid game data:`, game);
+        continue;
+      }
+
+      const homeTeam = teamCodeMapping[game.home];
+      const awayTeam = teamCodeMapping[game.away];
 
       // Skip games where team mapping is not found
       if (!homeTeam || !awayTeam) {
-        console.warn(`Invalid team mapping for game: ${game.homeTeam} vs ${game.awayTeam}`);
+        console.warn(`Unknown team codes: home=${game.home}, away=${game.away}`);
         continue;
       }
 
       games.push({
-        game_id: `${formattedDate}_${game.awayTeam}@${game.homeTeam}`,
+        game_id: game.gameID,
         game_date: format(date, 'yyyy-MM-dd'),
         home_team: homeTeam,
-        away_team: awayTeam,
-        game_time: game.gameTime || null,
-        arena: game.arena || null,
-        city: game.city || null,
-        state: game.state || null
+        away_team: awayTeam
       });
     }
 
+    console.log(`Found ${games.length} valid games for ${formattedDate}`);
     return games;
   } catch (error) {
     console.error(`Error fetching schedule for ${formattedDate}:`, error.message);
+    if (error.response) {
+      console.error('API Error Response:', error.response.data);
+    }
     return [];
   }
 }
@@ -119,6 +125,7 @@ async function fetchEntireSeason() {
       return;
     }
 
+    let totalGames = 0;
     // Fetch schedule for each date
     while (currentDate <= endDate) {
       const games = await fetchScheduleForDate(currentDate);
@@ -135,6 +142,7 @@ async function fetchEntireSeason() {
           console.error(`Error saving games for ${format(currentDate, 'yyyy-MM-dd')}:`, error);
         } else {
           console.log(`Saved ${games.length} games for ${format(currentDate, 'yyyy-MM-dd')}`);
+          totalGames += games.length;
         }
       }
 
@@ -145,7 +153,7 @@ async function fetchEntireSeason() {
       currentDate = addDays(currentDate, 1);
     }
 
-    console.log('Finished fetching entire season schedule');
+    console.log(`Finished fetching entire season schedule. Total games: ${totalGames}`);
   } catch (error) {
     console.error('Error fetching season schedule:', error);
     throw error;
