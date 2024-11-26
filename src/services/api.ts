@@ -1,49 +1,44 @@
-import axios from 'axios';
-import { format } from 'date-fns';
+import { format, startOfDay } from 'date-fns';
 import { generatePrediction } from './statsService';
 import { savePrediction, getPredictions } from './supabase';
+import { supabase } from './supabase';
 import type { GamePrediction } from '../types';
-
-const API_KEY = '2d2c1f1b92msh6a8546438f75ab7p18f644jsnfa55639522ed';
-const API_HOST = 'tank01-fantasy-stats.p.rapidapi.com';
-
-// Create axios instance based on environment
-const api = axios.create({
-  baseURL: import.meta.env.PROD 
-    ? 'https://tank01-fantasy-stats.p.rapidapi.com'
-    : 'http://localhost:3001/api',
-  headers: import.meta.env.PROD ? {
-    'X-RapidAPI-Key': API_KEY,
-    'X-RapidAPI-Host': API_HOST,
-  } : {}
-});
 
 export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]> {
   try {
+    // Normalize the date to start of day to ensure consistent matching
+    const normalizedDate = format(startOfDay(new Date(dateString)), 'yyyy-MM-dd');
+    console.log('Fetching predictions for date:', normalizedDate);
+
     // First try to get predictions from Supabase
-    const cachedPredictions = await getPredictions(dateString);
+    const cachedPredictions = await getPredictions(normalizedDate);
     if (cachedPredictions.length > 0) {
-      console.log('Using cached predictions for:', dateString);
+      console.log('Using cached predictions for:', normalizedDate);
       return cachedPredictions;
     }
 
-    // If no cached data, fetch from schedule and generate predictions
+    // If no cached data, fetch schedule and generate predictions
     const { data: scheduleGames, error: scheduleError } = await supabase
       .from('nba_schedule')
       .select('*')
-      .eq('game_date', dateString);
+      .eq('game_date', normalizedDate);
 
-    if (scheduleError) throw scheduleError;
+    if (scheduleError) {
+      console.error('Error fetching schedule:', scheduleError);
+      throw scheduleError;
+    }
+
     if (!scheduleGames?.length) {
-      console.log('No games scheduled for:', dateString);
+      console.log('No games scheduled for:', normalizedDate);
       return [];
     }
 
+    console.log(`Found ${scheduleGames.length} scheduled games for ${normalizedDate}`);
     const predictions: GamePrediction[] = [];
 
     for (const game of scheduleGames) {
       try {
-        // Get odds from database or API
+        // Get odds from database
         const { data: odds, error: oddsError } = await supabase
           .from('game_odds')
           .select('*')
@@ -52,6 +47,11 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
 
         if (oddsError || !odds) {
           console.warn(`No odds found for game ${game.game_id}`);
+          continue;
+        }
+
+        if (!game.team_id_home || !game.team_id_away) {
+          console.warn(`Missing team IDs for game ${game.game_id}`);
           continue;
         }
 
@@ -68,7 +68,7 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
         // Save prediction to Supabase
         await savePrediction({
           game_id: game.game_id,
-          game_date: dateString,
+          game_date: normalizedDate,
           home_team: game.home_team,
           away_team: game.away_team,
           team_id_home: game.team_id_home,
@@ -93,8 +93,8 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
           overUnder: prediction.overUnder,
           fanduelSpreadHome: odds.spread_home,
           fanduelTotal: odds.total,
-          homeTeamMoneyline: odds.home_moneyline,
-          awayTeamMoneyline: odds.away_moneyline
+          homeTeamMoneyline: odds.home_moneyline || 0,
+          awayTeamMoneyline: odds.away_moneyline || 0
         });
 
       } catch (error) {
@@ -102,6 +102,7 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
       }
     }
 
+    console.log(`Generated ${predictions.length} predictions for ${normalizedDate}`);
     return predictions;
   } catch (error) {
     console.error('Error fetching NBA data:', error);
