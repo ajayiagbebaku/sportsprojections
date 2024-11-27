@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { format, addDays } from 'date-fns';
+import { format } from 'date-fns';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://yjebzlvsjonvxfpcuwaa.supabase.co';
@@ -34,76 +34,7 @@ async function fetchScheduleForDate(date) {
       away_team: game.away,
       team_id_home: game.home,
       team_id_away: game.away
-    }));
+    })).filter(game => game.home_team && game.away_team);
 
     if (games.length > 0) {
       const { error } = await supabase
-        .from('nba_schedule')
-        .upsert(games, {
-          onConflict: 'game_id',
-          returning: 'minimal'
-        });
-
-      if (error) {
-        console.error(`Error saving games for ${formattedDate}:`, error);
-      } else {
-        console.log(`Saved ${games.length} games for ${formattedDate}`);
-      }
-    }
-
-    return games;
-  } catch (error) {
-    console.error(`Error fetching schedule for ${format(date, 'yyyy-MM-dd')}:`, error);
-    return [];
-  }
-}
-
-async function fetchQ42024Schedule() {
-  try {
-    // Clear existing schedule first
-    const { error: clearError } = await supabase
-      .from('nba_schedule')
-      .delete()
-      .gte('game_date', '2024-10-01')
-      .lte('game_date', '2024-12-31');
-
-    if (clearError) {
-      console.error('Error clearing existing schedule:', clearError);
-      return;
-    }
-
-    // Define date range for Q4 2024
-    const startDate = new Date('2024-10-01');
-    const endDate = new Date('2024-12-31');
-    let currentDate = startDate;
-    
-    console.log('Starting to fetch Q4 2024 NBA schedule...');
-    console.log(`Date range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
-
-    let totalGames = 0;
-    while (currentDate <= endDate) {
-      const games = await fetchScheduleForDate(currentDate);
-      totalGames += games.length;
-
-      // Add delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      currentDate = addDays(currentDate, 1);
-    }
-
-    console.log(`Finished fetching Q4 2024 schedule. Total games: ${totalGames}`);
-  } catch (error) {
-    console.error('Error fetching schedule:', error);
-    throw error;
-  }
-}
-
-// Run the fetcher
-fetchQ42024Schedule()
-  .then(() => {
-    console.log('Schedule fetch completed successfully');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('Schedule fetch failed:', error);
-    process.exit(1);
-  });
