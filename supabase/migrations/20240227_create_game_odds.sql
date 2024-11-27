@@ -7,9 +7,10 @@ create table if not exists game_odds (
     total numeric not null,
     home_moneyline integer,
     away_moneyline integer,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null
+    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 -- Create indexes
-create index game_odds_game_id_idx on game_odds(game_id);
-create index game_odds_game_date_idx on game_odds(game_date);
+create index if not exists game_odds_game_id_idx on game_odds(game_id);
+create index if not exists game_odds_game_date_idx on game_odds(game_date);

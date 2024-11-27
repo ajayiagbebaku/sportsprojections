@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { format, startOfToday } from 'date-fns';
+import { format } from 'date-fns';
 import { Calendar, RefreshCw } from 'lucide-react';
 import { GameCard } from './components/GameCard';
 import { ResultsHistory } from './components/ResultsHistory';
@@ -10,14 +10,14 @@ function App() {
   const [predictions, setPredictions] = useState<GamePrediction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState(format(startOfToday(), 'yyyy-MM-dd'));
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [showResults, setShowResults] = useState(false);
 
-  const loadPredictions = async () => {
+  const loadPredictions = async (date: string) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await fetchNBAOdds(selectedDate);
+      const data = await fetchNBAOdds(date);
       setPredictions(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
@@ -28,8 +28,17 @@ function App() {
   };
 
   useEffect(() => {
-    loadPredictions();
+    loadPredictions(selectedDate);
   }, [selectedDate]);
+
+  const handleDateChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = event.target.value;
+    setSelectedDate(newDate);
+  };
+
+  const handleRefresh = () => {
+    loadPredictions(selectedDate);
+  };
 
   if (showResults) {
     return (
@@ -65,9 +74,9 @@ function App() {
                   <input
                     type="date"
                     value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
+                    onChange={handleDateChange}
                     className="bg-transparent border border-blue-400 rounded px-2 py-1 text-white"
-                    max={format(startOfToday(), 'yyyy-MM-dd')}
+                    max="2025-04-17"
                   />
                 </div>
               </div>
@@ -80,7 +89,7 @@ function App() {
                 View Results
               </button>
               <button 
-                onClick={loadPredictions}
+                onClick={handleRefresh}
                 disabled={loading}
                 className="flex items-center gap-2 bg-blue-700 hover:bg-blue-600 px-4 py-2 rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
