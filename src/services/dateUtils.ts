@@ -5,7 +5,7 @@ export function normalizeDate(dateString: string): string {
 }
 
 export function formatApiDate(dateString: string): string {
-  return normalizeDate(dateString).replace(/-/g, '');
+  return format(parseISO(dateString), 'yyyyMMdd');
 }
 
 export function validateDate(dateString: string): boolean {

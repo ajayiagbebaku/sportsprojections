@@ -72,28 +72,19 @@ export async function getExistingPredictions(date: string): Promise<GamePredicti
 
 export async function savePrediction(prediction: PredictionRecord) {
   try {
-    const { data: existing } = await supabase
+    const { error } = await supabase
       .from('predictions')
-      .select('game_id')
-      .eq('game_id', prediction.game_id)
-      .maybeSingle();
+      .upsert(prediction, {
+        onConflict: 'game_id',
+        returning: 'minimal'
+      });
 
-    if (existing) {
-      const { error: updateError } = await supabase
-        .from('predictions')
-        .update(prediction)
-        .eq('game_id', prediction.game_id);
-
-      if (updateError) throw updateError;
-    } else {
-      const { error: insertError } = await supabase
-        .from('predictions')
-        .insert(prediction);
-
-      if (insertError) throw insertError;
+    if (error) {
+      console.error('Error saving prediction:', error);
+      throw error;
     }
   } catch (error) {
-    console.error('Error saving prediction:', error);
+    console.error('Error in savePrediction:', error);
     throw error;
   }
 }

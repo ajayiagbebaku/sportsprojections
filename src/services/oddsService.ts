@@ -1,79 +1,70 @@
 import { supabase } from './supabase';
-import { normalizeDate } from './dateUtils';
-import axios from 'axios';
+import { fetchNBAOdds } from './nbaApi';
+import { getTeamCode } from './teamMapping';
+import { formatApiDate } from './dateUtils';
 
-const API_KEY = '2d2c1f1b92msh6a8546438f75ab7p18f644jsnfa55639522ed';
-const API_HOST = 'tank01-fantasy-stats.p.rapidapi.com';
-
-export async function getGameOdds(date: string, gameIds: string[]) {
+export async function fetchAndSaveOdds(date: string) {
   try {
-    const normalizedDate = normalizeDate(date);
-    console.log('Getting odds for games:', gameIds);
+    console.log('\n=== Fetching and Saving Odds ===');
+    console.log('Input date:', date);
 
-    // First check existing odds in database
-    const { data: existingOdds, error: existingError } = await supabase
-      .from('game_odds')
+    // First get scheduled games for the date to match IDs
+    const { data: scheduledGames, error: scheduleError } = await supabase
+      .from('nba_schedule')
       .select('*')
-      .in('game_id', gameIds);
+      .eq('game_date', date);
 
-    if (existingError) {
-      console.error('Error fetching existing odds:', existingError);
-      throw existingError;
+    if (scheduleError) {
+      console.error('Error fetching scheduled games:', scheduleError);
+      throw scheduleError;
     }
 
-    // If we have all odds, return them
-    if (existingOdds?.length === gameIds.length) {
-      console.log('Using existing odds from database');
-      return existingOdds;
+    if (!scheduledGames?.length) {
+      console.log('No scheduled games found for date:', date);
+      return [];
     }
 
-    // Fetch fresh odds from API
-    console.log('Fetching fresh odds from API');
-    const formattedDate = normalizedDate.replace(/-/g, '');
-    
-    const response = await axios.get('https://tank01-fantasy-stats.p.rapidapi.com/getNBABettingOdds', {
-      headers: {
-        'X-RapidAPI-Key': API_KEY,
-        'X-RapidAPI-Host': API_HOST
-      },
-      params: {
-        gameDate: formattedDate,
-        itemFormat: 'list'
-      }
-    });
+    console.log(`Found ${scheduledGames.length} scheduled games`);
 
-    if (!response.data?.body) {
-      console.log('No odds found from API');
+    // Fetch odds from API
+    const response = await fetchNBAOdds(date);
+    if (!response) {
+      console.log('No odds data returned from API');
       return [];
     }
 
     const odds = [];
-    for (const [gameId, game] of Object.entries(response.data.body)) {
-      // Only process odds for games we're interested in
-      if (!gameIds.includes(gameId)) continue;
-
-      const fanduelBook = game.sportsBooks?.find(book => 
-        book.sportsBook.toLowerCase() === 'fanduel'
-      );
+    for (const [gameId, game] of Object.entries(response)) {
+      console.log(`\nProcessing odds for game: ${gameId}`);
       
-      if (!fanduelBook?.odds) {
-        console.warn('No FanDuel odds found for game', gameId);
+      // Find matching scheduled game
+      const scheduledGame = scheduledGames.find(g => 
+        g.team_id_home === game.team_id_home && 
+        g.team_id_away === game.team_id_away
+      );
+
+      if (!scheduledGame) {
+        console.log('No matching scheduled game found for:', {
+          homeTeam: game.team_id_home,
+          awayTeam: game.team_id_away
+        });
         continue;
       }
 
+      console.log('Found matching scheduled game:', scheduledGame.game_id);
+
       const oddsRecord = {
-        game_id: gameId,
-        game_date: normalizedDate,
-        spread_home: parseFloat(fanduelBook.odds.homeTeamSpread),
-        total: parseFloat(fanduelBook.odds.totalOver),
-        home_moneyline: parseInt(fanduelBook.odds.homeTeamMLOdds),
-        away_moneyline: parseInt(fanduelBook.odds.awayTeamMLOdds)
+        game_id: scheduledGame.game_id,
+        game_date: date,
+        spread_home: game.odds.spread_home,
+        total: game.odds.total,
+        home_moneyline: game.odds.home_moneyline,
+        away_moneyline: game.odds.away_moneyline
       };
 
-      // Validate numbers before saving
-      if (isNaN(oddsRecord.spread_home) || isNaN(oddsRecord.total) || 
-          isNaN(oddsRecord.home_moneyline) || isNaN(oddsRecord.away_moneyline)) {
-        console.warn('Invalid odds values for game', gameId);
+      // Validate numbers
+      if (isNaN(oddsRecord.spread_home) || isNaN(oddsRecord.total)) {
+        console.warn('Invalid odds values:', oddsRecord);
         continue;
       }
 
@@ -86,18 +77,21 @@ export async function getGameOdds(date: string, gameIds: string[]) {
         });
 
       if (error) {
-        console.error(`Error saving odds for game ${gameId}:`, error);
+        console.error(`Error saving odds for game ${scheduledGame.game_id}:`, error);
         continue;
       }
 
       odds.push(oddsRecord);
-      console.log(`Saved odds for game ${gameId}`);
+      console.log(`Saved odds for game ${scheduledGame.game_id}:`, {
+        spread: oddsRecord.spread_home,
+        total: oddsRecord.total
+      });
     }
 
-    console.log(`Saved odds for ${odds.length} games`);
+    console.log(`\nProcessed and saved odds for ${odds.length} games`);
     return odds;
   } catch (error) {
-    console.error('Error in getGameOdds:', error);
+    console.error('Error in fetchAndSaveOdds:', error);
     throw error;
   }
 }

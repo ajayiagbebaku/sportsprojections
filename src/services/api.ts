@@ -1,6 +1,6 @@
 import { normalizeDate, validateDate } from './dateUtils';
 import { getScheduledGames } from './scheduleService';
-import { getGameOdds } from './oddsService';
+import { fetchAndSaveOdds } from './oddsService';
 import { getTeamStats } from './teamStatsService';
 import { getExistingPredictions, savePrediction } from './predictionsService';
 import { generatePrediction } from './statsService';
@@ -8,19 +8,13 @@ import type { GamePrediction } from '../types';
 
 export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]> {
   try {
+    console.log('\n=== Starting fetchNBAOdds ===');
     if (!validateDate(dateString)) {
       throw new Error('Invalid date format');
     }
 
     const date = normalizeDate(dateString);
-    console.log('Fetching predictions for date:', date);
-
-    // Check existing predictions first
-    const existingPredictions = await getExistingPredictions(date);
-    if (existingPredictions.length > 0) {
-      console.log(`Found ${existingPredictions.length} existing predictions`);
-      return existingPredictions;
-    }
+    console.log('Normalized date:', date);
 
     // Get scheduled games
     const games = await getScheduledGames(date);
@@ -32,16 +26,19 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
 
     // Get team stats
     const teamCodes = games.flatMap(game => [game.team_id_home, game.team_id_away]);
+    console.log('Team codes to fetch:', teamCodes);
     const teamStats = await getTeamStats(teamCodes);
 
-    // Get odds for all games
-    const gameIds = games.map(game => game.game_id);
-    const odds = await getGameOdds(date, gameIds);
+    // Always fetch fresh odds
+    console.log('Fetching fresh odds...');
+    const odds = await fetchAndSaveOdds(date);
+    console.log(`Retrieved odds for ${odds.length} games`);
 
     // Generate predictions
     const predictions: GamePrediction[] = [];
 
     for (const game of games) {
+      console.log(`\nProcessing game: ${game.game_id}`);
       const homeStats = teamStats.find(t => t.team_code === game.team_id_home);
       const awayStats = teamStats.find(t => t.team_code === game.team_id_away);
       const gameOdds = odds.find(o => o.game_id === game.game_id);
@@ -52,36 +49,10 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
       }
 
       const prediction = generatePrediction(homeStats, awayStats);
+      console.log('Generated prediction:', prediction);
       
-      // Ensure odds are properly handled
-      const fanduelSpreadHome = gameOdds?.spread_home;
-      const fanduelTotal = gameOdds?.total;
-      const homeTeamMoneyline = gameOdds?.home_moneyline;
-      const awayTeamMoneyline = gameOdds?.away_moneyline;
-
-      const predictionRecord = {
-        gameId: game.game_id,
-        homeTeam: game.home_team,
-        awayTeam: game.away_team,
-        homeScore: prediction.homeScore,
-        awayScore: prediction.awayScore,
-        totalScore: prediction.totalScore,
-        projectedSpread: prediction.projectedSpread,
-        fanduelSpreadHome,
-        fanduelTotal,
-        homeTeamMoneyline,
-        awayTeamMoneyline,
-        suggestedBet: determineSuggestedBet(
-          prediction.projectedSpread,
-          fanduelSpreadHome || 0,
-          game.home_team,
-          game.away_team
-        ),
-        overUnder: prediction.totalScore > (fanduelTotal || 0) ? 'Over' : 'Under'
-      };
-
       // Save prediction to database
-      await savePrediction({
+      const predictionRecord = {
         game_id: game.game_id,
         game_date: date,
         home_team: game.home_team,
@@ -91,15 +62,37 @@ export async function fetchNBAOdds(dateString: string): Promise<GamePrediction[]
         predicted_home_score: prediction.homeScore,
         predicted_away_score: prediction.awayScore,
         predicted_total: prediction.totalScore,
-        fanduel_spread_home: fanduelSpreadHome || 0,
-        fanduel_total: fanduelTotal || 0,
-        home_moneyline: homeTeamMoneyline,
-        away_moneyline: awayTeamMoneyline
-      });
+        fanduel_spread_home: gameOdds?.spread_home || 0,
+        fanduel_total: gameOdds?.total || 0,
+        home_moneyline: gameOdds?.home_moneyline,
+        away_moneyline: gameOdds?.away_moneyline
+      };
 
-      predictions.push(predictionRecord);
+      await savePrediction(predictionRecord);
+
+      predictions.push({
+        gameId: game.game_id,
+        homeTeam: game.home_team,
+        awayTeam: game.away_team,
+        homeScore: prediction.homeScore,
+        awayScore: prediction.awayScore,
+        totalScore: prediction.totalScore,
+        projectedSpread: prediction.projectedSpread,
+        fanduelSpreadHome: gameOdds?.spread_home || 0,
+        fanduelTotal: gameOdds?.total || 0,
+        homeTeamMoneyline: gameOdds?.home_moneyline,
+        awayTeamMoneyline: gameOdds?.away_moneyline,
+        suggestedBet: determineSuggestedBet(
+          prediction.projectedSpread,
+          gameOdds?.spread_home || 0,
+          game.home_team,
+          game.away_team
+        ),
+        overUnder: prediction.totalScore > (gameOdds?.total || 0) ? 'Over' : 'Under'
+      });
     }
 
+    console.log(`\nGenerated ${predictions.length} predictions`);
     return predictions;
   } catch (error) {
     console.error('Error fetching/generating predictions:', error);
