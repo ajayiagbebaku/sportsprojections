@@ -2,27 +2,17 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
   'https://yjebzlvsjonvxfpcuwaa.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZWJ6bHZzam9udnhmcGN1d2FhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzIzNDI0MjAsImV4cCI6MjA0NzkxODQyMH0.s7pBFZGY1ZORMVSGQGpcp7GsiMzGOBeUIf2EapJ5yzU'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlqZWJ6bHZzam9udnhmcGN1d2FhIiwicm9lZSI6ImFub24iLCJpYXQiOjE3MzIzNDI0MjAsImV4cCI6MjA0NzkxODQyMH0.s7pBFZGY1ZORMVSGQGpcp7GsiMzGOBeUIf2EapJ5yzU'
 );
 
 async function setupDatabase() {
   try {
     console.log('Setting up database...');
 
-    // First clear existing data
-    const { error: clearError } = await supabase
-      .from('team_stats')
-      .delete()
-      .neq('id', 0);
-
-    if (clearError) {
-      console.error('Error clearing team stats:', clearError);
-    }
-
     // Insert team stats
     const { error: insertError } = await supabase
       .from('team_stats')
-      .insert([
+      .upsert([
         { team_name: 'Atlanta', team_code: 'ATL', ppg: 114.9, oppg: 119.6, pace: 103.3 },
         { team_name: 'Boston', team_code: 'BOS', ppg: 121.5, oppg: 111.8, pace: 97.3 },
         { team_name: 'Brooklyn', team_code: 'BKN', ppg: 111.7, oppg: 114.7, pace: 96.3 },
@@ -53,7 +43,10 @@ async function setupDatabase() {
         { team_name: 'Toronto', team_code: 'TOR', ppg: 113.2, oppg: 118.6, pace: 98.9 },
         { team_name: 'Utah', team_code: 'UTA', ppg: 108.7, oppg: 119.3, pace: 99.7 },
         { team_name: 'Washington', team_code: 'WAS', ppg: 109.9, oppg: 124.7, pace: 103.0 }
-      ]);
+      ], {
+        onConflict: 'team_code',
+        ignoreDuplicates: false
+      });
 
     if (insertError) {
       console.error('Error inserting team stats:', insertError);
