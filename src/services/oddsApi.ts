@@ -8,6 +8,8 @@ const API_HOST = 'tank01-fantasy-stats.p.rapidapi.com';
 interface APIResponse {
   statusCode: number;
   body: Record<string, {
+    homeTeam: string;
+    awayTeam: string;
     sportsBooks: Array<{
       sportsBook: string;
       odds: {
@@ -19,6 +21,46 @@ interface APIResponse {
     }>;
   }>;
 }
+
+// Team code mapping to ensure consistency
+const teamCodeMapping = {
+  'ATL': 'ATL',
+  'BOS': 'BOS',
+  'BKN': 'BKN',
+  'CHA': 'CHA',
+  'CHI': 'CHI',
+  'CLE': 'CLE',
+  'DAL': 'DAL',
+  'DEN': 'DEN',
+  'DET': 'DET',
+  'GSW': 'GSW',
+  'HOU': 'HOU',
+  'IND': 'IND',
+  'LAC': 'LAC',
+  'LAL': 'LAL',
+  'MEM': 'MEM',
+  'MIA': 'MIA',
+  'MIL': 'MIL',
+  'MIN': 'MIN',
+  'NOP': 'NOP',
+  'NYK': 'NYK',
+  'OKC': 'OKC',
+  'ORL': 'ORL',
+  'PHI': 'PHI',
+  'PHX': 'PHX',
+  'POR': 'POR',
+  'SAC': 'SAC',
+  'SAS': 'SAS',
+  'TOR': 'TOR',
+  'UTA': 'UTA',
+  'WAS': 'WAS',
+  // Handle any variations
+  'BRK': 'BKN',
+  'GS': 'GSW',
+  'NO': 'NOP',
+  'NY': 'NYK',
+  'SA': 'SAS'
+};
 
 export async function fetchAndSaveOdds(date: string) {
   try {
@@ -43,6 +85,14 @@ export async function fetchAndSaveOdds(date: string) {
 
     const odds = [];
     for (const [gameId, game] of Object.entries(response.data.body)) {
+      const homeCode = teamCodeMapping[game.homeTeam];
+      const awayCode = teamCodeMapping[game.awayTeam];
+
+      if (!homeCode || !awayCode) {
+        console.warn(`Invalid team code mapping for game: ${game.homeTeam} vs ${game.awayTeam}`);
+        continue;
+      }
+
       const fanduelBook = game.sportsBooks?.find(book => 
         book.sportsBook.toLowerCase() === 'fanduel'
       );
@@ -55,6 +105,8 @@ export async function fetchAndSaveOdds(date: string) {
       const oddsRecord = {
         game_id: gameId,
         game_date: date,
+        team_id_home: homeCode,
+        team_id_away: awayCode,
         spread_home: parseFloat(fanduelBook.odds.homeTeamSpread),
         total: parseFloat(fanduelBook.odds.totalOver),
         home_moneyline: parseInt(fanduelBook.odds.homeTeamMLOdds),
