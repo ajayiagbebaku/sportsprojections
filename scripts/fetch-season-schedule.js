@@ -9,6 +9,46 @@ const RAPIDAPI_HOST = 'tank01-fantasy-stats.p.rapidapi.com';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Team code mapping to ensure consistency
+const teamCodeMapping = {
+  'ATL': 'ATL',
+  'BOS': 'BOS',
+  'BKN': 'BKN',
+  'CHA': 'CHA',
+  'CHI': 'CHI',
+  'CLE': 'CLE',
+  'DAL': 'DAL',
+  'DEN': 'DEN',
+  'DET': 'DET',
+  'GSW': 'GSW',
+  'HOU': 'HOU',
+  'IND': 'IND',
+  'LAC': 'LAC',
+  'LAL': 'LAL',
+  'MEM': 'MEM',
+  'MIA': 'MIA',
+  'MIL': 'MIL',
+  'MIN': 'MIN',
+  'NOP': 'NOP',
+  'NYK': 'NYK',
+  'OKC': 'OKC',
+  'ORL': 'ORL',
+  'PHI': 'PHI',
+  'PHX': 'PHX',
+  'POR': 'POR',
+  'SAC': 'SAC',
+  'SAS': 'SAS',
+  'TOR': 'TOR',
+  'UTA': 'UTA',
+  'WAS': 'WAS',
+  // Handle any variations
+  'BRK': 'BKN',
+  'GS': 'GSW',
+  'NO': 'NOP',
+  'NY': 'NYK',
+  'SA': 'SAS'
+};
+
 async function fetchScheduleForDate(date) {
   try {
     const formattedDate = format(date, 'yyyyMMdd');
@@ -27,14 +67,25 @@ async function fetchScheduleForDate(date) {
       return [];
     }
 
-    const games = response.data.body.map(game => ({
-      game_id: game.gameID,
-      game_date: format(date, 'yyyy-MM-dd'),
-      home_team: game.home,
-      away_team: game.away,
-      team_id_home: game.home,
-      team_id_away: game.away
-    }));
+    const games = [];
+    for (const game of response.data.body) {
+      const homeCode = teamCodeMapping[game.home];
+      const awayCode = teamCodeMapping[game.away];
+
+      if (!homeCode || !awayCode) {
+        console.warn(`Invalid team code mapping for game: ${game.home} vs ${game.away}`);
+        continue;
+      }
+
+      games.push({
+        game_id: game.gameID,
+        game_date: format(date, 'yyyy-MM-dd'),
+        home_team: game.home,
+        away_team: game.away,
+        team_id_home: homeCode,
+        team_id_away: awayCode
+      });
+    }
 
     if (games.length > 0) {
       const { error } = await supabase
