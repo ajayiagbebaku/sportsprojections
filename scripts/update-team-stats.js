@@ -1,5 +1,5 @@
 import axios from 'axios';
-import cheerio from 'cheerio';
+import * as cheerio from 'cheerio';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = 'https://yjebzlvsjonvxfpcuwaa.supabase.co';
@@ -7,53 +7,101 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Team code mapping to ensure consistency
+const teamCodeMapping = {
+  'ATL': 'ATL',
+  'BOS': 'BOS',
+  'BKN': 'BKN',
+  'CHA': 'CHA',
+  'CHI': 'CHI',
+  'CLE': 'CLE',
+  'DAL': 'DAL',
+  'DEN': 'DEN',
+  'DET': 'DET',
+  'GSW': 'GSW',
+  'HOU': 'HOU',
+  'IND': 'IND',
+  'LAC': 'LAC',
+  'LAL': 'LAL',
+  'MEM': 'MEM',
+  'MIA': 'MIA',
+  'MIL': 'MIL',
+  'MIN': 'MIN',
+  'NOP': 'NOP',
+  'NYK': 'NYK',
+  'OKC': 'OKC',
+  'ORL': 'ORL',
+  'PHI': 'PHI',
+  'PHX': 'PHX',
+  'POR': 'POR',
+  'SAC': 'SAC',
+  'SAS': 'SAS',
+  'TOR': 'TOR',
+  'UTA': 'UTA',
+  'WAS': 'WAS'
+};
+
 async function fetchAndUpdateStats() {
   try {
+    console.log('Fetching NBA team stats...');
     const response = await axios.get('https://www.nbastuffer.com/2024-2025-nba-team-stats/');
     const $ = cheerio.load(response.data);
     
     // Process the stats table
-    $('table tr').each(async (i, row) => {
-      if (i === 0) return; // Skip header
+    const updates = [];
+    $('table tr').each((i, row) => {
+      if (i === 0) return; // Skip header row
       
       const cols = $(row).find('td');
       if (cols.length > 0) {
         const teamCode = $(cols[0]).text().trim();
-        const stats = {
-          ppg: parseFloat($(cols[3]).text()),
-          oppg: parseFloat($(cols[4]).text()),
-          pace: parseFloat($(cols[5]).text())
-        };
+        const teamName = $(cols[1]).text().trim();
+        
+        if (teamCodeMapping[teamCode]) {
+          const stats = {
+            team_code: teamCode,
+            team_name: teamName,
+            ppg: parseFloat($(cols[3]).text()),
+            oppg: parseFloat($(cols[4]).text()),
+            pace: parseFloat($(cols[5]).text()),
+            updated_at: new Date().toISOString()
+          };
 
-        if (!isNaN(stats.ppg) && !isNaN(stats.oppg) && !isNaN(stats.pace)) {
-          // Update stats in database
-          const { error } = await supabase
-            .from('team_stats')
-            .update({
-              ppg: stats.ppg,
-              oppg: stats.oppg,
-              pace: stats.pace,
-              updated_at: new Date().toISOString()
-            })
-            .eq('team_code', teamCode);
-
-          if (error) {
-            console.error(`Error updating stats for ${teamCode}:`, error);
-          } else {
-            console.log(`Updated stats for ${teamCode}`);
+          if (!isNaN(stats.ppg) && !isNaN(stats.oppg) && !isNaN(stats.pace)) {
+            updates.push(stats);
           }
         }
       }
     });
 
-    console.log('Stats update completed');
+    if (updates.length > 0) {
+      console.log(`Found ${updates.length} teams to update`);
+      
+      // Update stats in database
+      const { error } = await supabase
+        .from('team_stats')
+        .upsert(updates, {
+          onConflict: 'team_code',
+          returning: 'minimal'
+        });
+
+      if (error) {
+        console.error('Error updating team stats:', error);
+        process.exit(1);
+      }
+
+      console.log('Successfully updated team stats');
+    } else {
+      console.log('No valid team stats found to update');
+      process.exit(1);
+    }
+
+    process.exit(0);
   } catch (error) {
     console.error('Error updating stats:', error);
-    throw error;
+    process.exit(1);
   }
 }
 
 // Run the update
-fetchAndUpdateStats()
-  .then(() => process.exit(0))
-  .catch(() => process.exit(1));
+fetchAndUpdateStats();

@@ -14,6 +14,7 @@ const teamCodeMapping = {
   'ATL': 'ATL',
   'BOS': 'BOS',
   'BKN': 'BKN',
+  'BRK': 'BKN',
   'CHA': 'CHA',
   'CHI': 'CHI',
   'CLE': 'CLE',
@@ -21,6 +22,7 @@ const teamCodeMapping = {
   'DEN': 'DEN',
   'DET': 'DET',
   'GSW': 'GSW',
+  'GS': 'GSW',
   'HOU': 'HOU',
   'IND': 'IND',
   'LAC': 'LAC',
@@ -30,7 +32,9 @@ const teamCodeMapping = {
   'MIL': 'MIL',
   'MIN': 'MIN',
   'NOP': 'NOP',
+  'NO': 'NOP',
   'NYK': 'NYK',
+  'NY': 'NYK',
   'OKC': 'OKC',
   'ORL': 'ORL',
   'PHI': 'PHI',
@@ -38,15 +42,10 @@ const teamCodeMapping = {
   'POR': 'POR',
   'SAC': 'SAC',
   'SAS': 'SAS',
+  'SA': 'SAS',
   'TOR': 'TOR',
   'UTA': 'UTA',
-  'WAS': 'WAS',
-  // Handle any variations
-  'BRK': 'BKN',
-  'GS': 'GSW',
-  'NO': 'NOP',
-  'NY': 'NYK',
-  'SA': 'SAS'
+  'WAS': 'WAS'
 };
 
 async function fetchScheduleForDate(date) {
@@ -109,29 +108,26 @@ async function fetchScheduleForDate(date) {
   }
 }
 
-async function fetchQ42024Schedule() {
+async function fetchScheduleForDateRange(startDate, endDate) {
   try {
-    // Clear existing schedule first
+    // Clear existing schedule for the date range
     const { error: clearError } = await supabase
       .from('nba_schedule')
       .delete()
-      .gte('game_date', '2024-10-01')
-      .lte('game_date', '2024-12-31');
+      .gte('game_date', format(startDate, 'yyyy-MM-dd'))
+      .lte('game_date', format(endDate, 'yyyy-MM-dd'));
 
     if (clearError) {
       console.error('Error clearing existing schedule:', clearError);
       return;
     }
 
-    // Define date range for Q4 2024
-    const startDate = new Date('2024-10-01');
-    const endDate = new Date('2024-12-31');
-    let currentDate = startDate;
-    
-    console.log('Starting to fetch Q4 2024 NBA schedule...');
+    console.log('Starting to fetch NBA schedule...');
     console.log(`Date range: ${format(startDate, 'yyyy-MM-dd')} to ${format(endDate, 'yyyy-MM-dd')}`);
 
+    let currentDate = startDate;
     let totalGames = 0;
+
     while (currentDate <= endDate) {
       const games = await fetchScheduleForDate(currentDate);
       totalGames += games.length;
@@ -141,15 +137,18 @@ async function fetchQ42024Schedule() {
       currentDate = addDays(currentDate, 1);
     }
 
-    console.log(`Finished fetching Q4 2024 schedule. Total games: ${totalGames}`);
+    console.log(`Finished fetching schedule. Total games: ${totalGames}`);
   } catch (error) {
     console.error('Error fetching schedule:', error);
     throw error;
   }
 }
 
-// Run the fetcher
-fetchQ42024Schedule()
+// Run the fetcher for October-December 2024
+const startDate = new Date('2024-10-01');
+const endDate = new Date('2024-12-31');
+
+fetchScheduleForDateRange(startDate, endDate)
   .then(() => {
     console.log('Schedule fetch completed successfully');
     process.exit(0);

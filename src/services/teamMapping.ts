@@ -1,0 +1,41 @@
+export const teamCodeMapping = {
+  'ATL': 'ATL',
+  'BOS': 'BOS',
+  'BKN': 'BKN',
+  'BRK': 'BKN',
+  'CHA': 'CHA',
+  'CHI': 'CHI',
+  'CLE': 'CLE',
+  'DAL': 'DAL',
+  'DEN': 'DEN',
+  'DET': 'DET',
+  'GSW': 'GSW',
+  'GS': 'GSW',
+  'HOU': 'HOU',
+  'IND': 'IND',
+  'LAC': 'LAC',
+  'LAL': 'LAL',
+  'MEM': 'MEM',
+  'MIA': 'MIA',
+  'MIL': 'MIL',
+  'MIN': 'MIN',
+  'NOP': 'NOP',
+  'NO': 'NOP',
+  'NYK': 'NYK',
+  'NY': 'NYK',
+  'OKC': 'OKC',
+  'ORL': 'ORL',
+  'PHI': 'PHI',
+  'PHX': 'PHX',
+  'POR': 'POR',
+  'SAC': 'SAC',
+  'SAS': 'SAS',
+  'SA': 'SAS',
+  'TOR': 'TOR',
+  'UTA': 'UTA',
+  'WAS': 'WAS'
+} as const;
+
+export function getTeamCode(teamAbbr: string): string | null {
+  return teamCodeMapping[teamAbbr as keyof typeof teamCodeMapping] || null;
+}

@@ -9,7 +9,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "setup-db": "node scripts/setup-database.js",
-    "fetch-schedule": "node scripts/fetch-season-schedule.js"
+    "fetch-schedule": "node scripts/fetch-season-schedule.js",
+    "update-stats": "node scripts/update-team-stats.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.7",
