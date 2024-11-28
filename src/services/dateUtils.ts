@@ -1,4 +1,4 @@
-import { format, parseISO, startOfDay } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 export function normalizeDate(dateString: string): string {
   return format(parseISO(dateString), 'yyyy-MM-dd');
